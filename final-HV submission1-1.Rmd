@@ -1,0 +1,327 @@
+---
+title: 'CSCI E-63C: Final Exam'
+output:
+  html_document:
+    toc: true
+---
+#Student: Huynh Vo
+```{r setup, include=FALSE}
+library(stringi)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preface
+
+For the final exam/project we will develop classification models using several approaches and compare their performance on a new dataset -- so-called "Census Income" from UCI ML.  It is available at UCI ML web site, but so that we are not at the mercy of UCI ML availability, there is also a local copy of it in our website in Canvas as a zip-archive of all associated files.  Among other things, the description for this dataset also presents performance (prediction accuracy) observed by the dataset providers using variety of modeling techniques -- this supplies a context for the errors of the models we will develop here.
+
+Please note that the original data has been split up into training and test subsets, but there doesn't seem to be anything particular about that split, so we might want to pool those two datasets together and split them into training and test as necessary ourselves. As you do that, please check that the attribute levels are consistent between those two files.  For instance, the categorized income levels are indicated using slightly different notation in their training and test data.   By now it should be quite straightforward for you to correct that when you pool them together.
+
+Also, please note that there is non-negligible number of rows with missing values that for most analyses cannot be included without modification in the computation.  Please decide how you want to handle them and proceed accordingly.  The simplest and perfectly acceptable approach would be to exclude those observations from the rest of the analyses, but if you have time and inclination to investigate the impact of imputing them by various means, you are welcome to try.
+
+Attribute called "final weight" in the dataset description represents demographic weighting of these observations.  Please disregard it for the purposes of this assignment.
+
+Additionally, several attributes in this dataset are categorical variables with more than two levels (e.g. native country, occupation, etc.).  Please make sure to translate them into corresponding sets of for the methods that require such conversion (e.g. PCA) -- R function `model.matrix` can be convenient for this, instead of generating those 0/1 indicators for each level of the factor manually (which is still perfectly fine).  Some of those multi-level factors contain very sparsely populated categories -- e.g. occupation "Armed-Forces" or work class "Never-worked" -- it is your call whether you want to keep those observations in the data or exclude also on the basis that there is not enough data to adequately capture the impact of those categories. Feel free to experiment away!
+
+Among the multi-level categorical attributes, native country attribute has the largest number of levels -- several folds higher than any other attribute in this dataset -- some of which have relatively few observations.  This associated increase in dimensionality of the data may not be accompanied by a corresponding gain of resolution -- e.g. would we expect this data to support the *difference* in income between descendants from Peru and Nicaragua, for example, or from Cambodia and Laos?  Please feel free to evaluate the impact of inclusion and/or omission of this attribute in/from the model and/or discretizing it differently (e.g. US/non-US, etc.).
+
+Lastly, the size of this dataset can make some of the modeling techniques run slower than what we were typically encountering in this class.  You may find it helpful to do some of the exploration and model tuning on multiple random samples of smaller size as you decide on useful ranges of parameters/modeling choices, and then only perform a final run of fully debugged and working code on the full dataset.  Please see also the afterword below on the computational demands of this problem set.
+
+```{r}
+library(readr)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(data.table)
+library(psych)
+library(MASS)
+library(class)
+library(ISLR)
+library(e1071)
+library(GGally)
+library(cluster)
+library(ROCR)
+library(randomForest)
+```
+# Problem 1: univariate and unsupervised analysis (20 points)   #HW8
+
+Download and read "Census Income" data into R and prepare graphical and numerical summaries of it: e.g. histograms of continuous attributes, contingency tables of categorical variables, scatterplots of continuous attributes with some of the categorical variables indicated by color/symbol shape, etc.  Perform principal components analysis of this data (do you need to scale it prior to that? how would you represent multilevel categorical attributes to be used as inputs for PCA?) and plot observations in the space of the first few principal components with subjects' gender and/or categorized income indicated by color/shape of the symbol.  Perform univariate assessment of associations between outcome we will be modeling and each of the attributes (e.g. t-test or logistic regression for continuous attributes, contingency tables/Fisher exact test/$\chi^2$ test for categorical attributes).  Summarize your observations from these assessments: does it appear that there is association between outcome and predictors? Which predictors seem to be more/less relevant?
+Answer:
+First, I imported the 2 datasets from "Census Income" and merged them to become 1 census dataset.
+```{r}
+censustrain <- read.table("/Users/Huynhvalentine/Desktop/CSCIE63C/Week13/CensusIncome/adult.data", sep=",")
+censustest <- read.table("/Users/Huynhvalentine/Desktop/CSCIE63C/Week13/CensusIncome/adult.test", skip = 1, sep=",")
+census <- rbind(censustrain, censustest)
+colnames(census) <- c("age", "workingclass", "fnlwgt", "education", "educationnum", "materialstatus", "occupation", "relationship", "race", "sex", "capitalgain", "capitalloss", "hoursperweek", "nativecountry", "class")
+#final weight column is removed per the assignemnt requested
+census$fnlwgt <- NULL
+head(census)
+dim(census)
+sapply(census, mode)
+```
+```{r}
+#removing duplicates
+head(unique(census))
+#removing ? values after converting them to NA, took me 5 hours because I couldnt figure out right away that its " ?", not "?"
+census[census==" ?"] <- NA
+census$class[census$class==" <=50K."] <- " <=50K"
+census$class[census$class==" >50K."] <- " >50K"
+census <-na.omit(census)
+```
+
+```{r}
+describe(census)
+```
+
+```{r}
+summary(census)
+```
+
+
+
+Looking at the result of the summary of census data, the majority of people live in the United States and next is Mexico. The male population is double the population of female. Most of people in this dataset are White. Most people in this data are married men. Most of the peoples' education is high school graduate. Most of the people work for private companies.And most of people's age are at 37 years old. In terms of their occupation, craft-repair, professional specialty and executive managerial are the major careers that these people obtain. Most people work 40 hours per week, on average 41 hours per week. Also, the average of capital gain (1100) is higher than the mean of capital loss(89). Last but not least, the amount of people who have income less than or equal to $50000 is double the amount of people who have income more than $50000.
+
+Below are histograms and scatterplots of continuous attributes (age, education num, capital gain, capital loss, hours per week) with some of the categorical variables indicated by color/symbol shape, etc.
+Histogram for Census continous attributes:
+```{r}
+#age histogram
+hist(census$age, main="Histogram for Census dataset - age",xlab="age", border="blue", col="green",las=1, breaks=5)
+#education num histogram
+hist(census$educationnum, main="Histogram for Census dataset - education number",xlab="education number", border="blue", col="red",las=1, breaks=5)
+#captial gain histogram
+hist(census$capitalgain, main="Histogram for Census dataset - capital gain",xlab="capital gain", border="blue", col="blue",las=3, breaks=5)
+#capital loss histogram
+hist(census$capitalloss, main="Histogram for Census dataset - capital loss",xlab="capital loss", border="blue", col="orange",las=1, breaks=5)
+#hours per week histogram
+hist(census$hoursperweek, main="Histogram for Census dataset - hours per week",xlab="hours per week", border="blue", col="yellow",las=1, breaks=5)
+
+```
+
+
+Scatterplot:
+```{r}
+#age vs hours per week
+plot(census[,c("age","hoursperweek")])
+abline(lm(age~hoursperweek,census))
+
+#age vs capital gain
+plot(census[,c("age","capitalgain")])
+abline(lm(age~capitalgain,census))
+
+#age vs capital loss
+plot(census[,c("age","capitalloss")])
+abline(lm(age~capitalloss,census))
+
+```
+
+
+```{r}
+#boxplot of education num based on class
+ggplot(census, aes(x=class, y=educationnum))+
+geom_boxplot()
+#boxplot of age based on class
+ggplot(census, aes(x=class, y=age))+
+geom_boxplot()
+#boxplot of hours per week based on class
+ggplot(census, aes(x=class, y=hoursperweek))+
+geom_boxplot()
+```
+
+```{r}
+#boxplot of hours per week based on class
+ggplot(census, aes(x=relationship, y=hoursperweek))+
+geom_boxplot()
+```
+
+```{r}
+ggplot(data=census, aes(x=class, fill=sex)) +
+geom_bar()
+```
+
+
+While education-num increases with higher education levels (HS-grad has education-num 9, Bachelors has education-num 13, Doctorate has education-num 16). Looking at scatter plots and boplots, we also see that on average, people making less than 50K are younger, and have less educated number of years and work a little less hours per week compared to the people making more than 50K per year. In terms of population, there are more people making less than 50K. For people whom make more than 50K, the majority is male (about 90%). For people who are above 70 years old, they tend to have less capital gain; they are also the ones whom don't have much capital loss. It makes sense because people at this age often want to retire, or they want a more relaxing job which gets less pay compared to 30-40 year old people.
+
+
+```{r}
+correlation <- cor(census[, c("age", "educationnum", "capitalgain", "capitalloss", "hoursperweek")])
+corrplot(correlation, method = "number")
+```
+
+
+Now, I started to notice there are a couple of columns that represent very similar information. The relationship and material status columns, education num and education columns, so I am going to remove some columns that I dont think are necessary for my prediction. I am also going to transform the text data into number:
+```{r}
+census$materialstatus <- NULL
+census$education <- NULL
+census1 <- model.matrix(~ age+workingclass+educationnum+occupation+relationship+race+sex+capitalgain+capitalloss+hoursperweek+nativecountry+class, data=census)
+census2 <- census[,c(1,3,8,9,10,12)]
+#census2$class <-c("yes","no")[census2$class]
+census2$class <- factor(census2$class)
+ggpairs(census2,aes(colour=class))
+```
+
+
+Performs a principal components analysis on the given data matrix:
+```{r}
+census3 <- census[,c(1,3,8,9,10)]
+old.par <- par(mfrow=c(1,3), ps=16)
+for (scale in c(F,T)) {
+  #Obtain results of principal components analysis of the data (by using `prcomp`). Answer:
+pr.out<- prcomp(census3, scale=scale)
+  #Generate scree plot of PCA results (by calling `plot` on the result of `prcomp`). Answer:
+plot(pr.out$x[,1:2], main="scree plot") 
+mtext(paste(ifelse(scale,"transformed", "untransformed")))
+  #Generate plot of the two first principal components using `biplot`.  Which variables seem to predominantly drive the results of PCA when applied to untransformed data? Answer:
+biplot (pr.out)
+mtext(paste(ifelse(scale,"transformed", "untransformed")))
+plot(pr.out$x[,1:2], main="countries", xlim=range(pr.out$x[,1]))
+mtext(paste(ifelse(scale,"transformed", "untransformed")))
+}
+```
+
+
+From my observations from these assessments, capital gain is less relevant to the dataset. There is association between outcome and predictors. Age, education number, hours per week and capital loss are the predictors that are most relavant.
+
+# Problem 2: logistic regression (25 points)
+
+Develop logistic regression model of the outcome as a function of multiple predictors in the model.  Which variables are significantly associated with the outcome?  Test model performance on multiple splits of data into training and test subsets, summarize it in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+Answer:I think the predictors are educationnum, hoursperweek, and age. But let's check it out after testing the model:
+The class is the result for the prediction. Below is the logistic regression model:
+
+```{r}
+glmRes <- glm(class~age+educationnum+capitalgain+capitalloss+hoursperweek,data=census2,family=binomial)
+summary(glmRes)
+```
+
+
+The warning “fitted probabilities numerically 0 or 1 occurred” issued by glm above shows that certain observations are not close to the decision boundary.
+
+```{r}
+glmPred <- predict(glmRes,type="response")>0.5
+table(census2[,"class"],glmPred)
+```
+
+```{r}
+summPreds <- function(inpPred,inpTruth,inpMetrNms=c("err","acc","sens","spec")) {
+  retVals <- numeric()
+  for ( metrTmp in inpMetrNms ) {
+    retVals[metrTmp] <- performance(prediction(inpPred,inpTruth),measure=metrTmp)@y.values[[1]][2]
+  }
+  retVals
+}
+summPreds(as.numeric(1+glmPred),as.numeric(census2[,"class"]))
+```
+
+
+Overall (training) error in this case (shown above) is less than 1%. Sensitivity is about 40%, and specificity is 95%. Accuracy is 80% which is not so bad. Age, educationnum, capitalgain, capitalloss and hoursperweek are significantly associated with the class we are predicting here.
+The model performance tested on multiple splits of data into training and test subsets. Its accuracy is 80%, its specificity is 95% and its sensitivity is 40%. The values are not too good but also not too bad overall.
+
+# Problem 3: random forest (25 points)
+
+Develop random forest model of the categorized income. Present variable importance plots and comment on relative importance of different attributes in the model.  Did attributes showing up as more important in random forest model also appear as significantly associated with the outcome by logistic regression?  Test model performance on multiple splits of data into training and test subsets, compare test and out-of-bag error estimates, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+Answer:
+A random forest model is developed below for the categorized income, in this case is "class" column which represents people whose income is either <=50K or >50K.
+
+```{r}
+tblTmp <- randomForest(class~.,census2)$confusion
+tblTmp
+```
+
+```{r}
+1-sum(diag(tblTmp[,1:2]))/nrow(census2)
+```
+
+```{r}
+table(predict(randomForest(class~.,census2),newdata=census2),census2$class)
+```
+
+
+```{r}
+table(predict(randomForest(class~.,census2)),predict(randomForest(class~.,census2),newdata=census2))
+```
+
+
+
+The Random forest seems to do reasonably well on this dataset.
+Manually, I calculated the specificity and sensitivity for the performance:
+Specificity = 37965/(404+37965)*100% = 98.95%
+Sensitivity = 6341/(6341+512)*100% = 92.5%
+Attributes are more important in a random forest model and also appear as signficantly associated with the outcome, it is shown by the high % of sensitivity or True Positive Rate. Looking at the specificity and sensitivity of a random forest model performance on this dataset, it provides more accuracy compared to the logistic regression in problem number 2 above.
+
+# Problem 4: SVM (25 points)
+
+Develop SVM model of this data choosing parameters (e.g. choice of kernel, cost, etc.) that appear to yield better performance.  Test model performance on multiple splits of data into training and test subsets, summarize model performance in terms of accuracy/error, sensitivity/specificity and compare to the performance of other methods reported in the dataset description.
+
+Answer:
+```{r}
+svm(class~.,data=census2,kernel="linear",cost=0.001)
+```
+Number of Support Vectors is 20692 which is very large here. Therefore I am trying to tune to proper cost:
+```{r}
+summary(tune(svm,class~.,data=census2,kernel="linear",ranges=list(cost=0.001,0.005, 0.01, 0.5,0.1)))
+```
+
+SVM model has performed this dataset  very well with $k$ value in between 9 to 11 and $cost$ is at about 0.005. The processing time on this model leads to inconvenience when attempting to use it for practical purposes. It is accurate though. 
+# Problem 5: compare logistic regression, random forest and SVM model performance (5 points)
+
+Compare performance of the models developed above (logistic regression, random forest, SVM) in terms of their accuracy, error and sensitivity/specificity.  Comment on differences and similarities between them.
+
+Answer: After performing logistic regression, random forest and number of support vector models, the random forest provides the best performance because not only is it quick, it is also highly accurate and positive sensitivity/specificity for this census dataset. Age, gender, education year are the three major predictions that contribute to predict this dataset. SVM models, while accurate are also very slow to process. The fastest to process, logistic regression, was least accurate.
+
+# Extra 10 points: KNN model
+
+Develop KNN model for this data, evaluate its performance for different values of $k$ on different splits of the data into training and test and compare it to the performance of other methods reported in the dataset description.  Notice that this dataset includes many categorical variables as well as continuous attributes measured on different scales, so that the distance has to be defined to be meaningful (probably avoiding subtraction of the numerical values of multi-level factors directly or adding differences between untransformed age and capital gain/loss attributes).
+
+Answer:
+
+```{r}
+tune.knn(census2[,-ncol(census2)],census2$class,k=1:10)
+```
+The result says that at k=9, we have the best k in KNN with 17% accuracy. I am going to try for k from 5 to 15.
+```{r}
+for ( iTry in 1:15 ) {
+  cat(unlist(tune.knn(census2[,-ncol(census2)],census2$class,k=5:15)[c("best.parameters","best.performance")]),fill=TRUE)
+}
+```
+After 15 tries, with knn, the best k is 11 with 17% accuracy. I would like $k$ to be somewhere around 9 to 10 which would provide good performance.
+
+I also tried to run the below code to see the error for this KNN model but it took quite some time to process. I am unsure what the problem is because my computer should be able to handle the processing. 
+
+
+dfTmp <- NULL
+for ( iSim in 1:100 ) {
+  for ( iResample in 1:2 ) {
+    if ( iResample == 1 ) {
+      trainIdx <- sample(nrow(census2),nrow(census2),replace=TRUE)
+    } else if ( iResample == 2 ) {
+      trainIdx <- sample(nrow(census2),0.67*nrow(census2))
+    }
+    knnTuneRes <- tune.knn(census2[trainIdx,-ncol(census2)],census2[trainIdx,ncol(census2)],k=1:11)
+    knnTestRes <- knn(census2[trainIdx,-ncol(census2)],census2[-trainIdx,-ncol(census2)],census2[trainIdx,ncol(census2)],k=knnTuneRes$best.parameters[,"k"])
+    tblTmp <- table(census2[-trainIdx,"class"],knnTestRes)
+  #print(tblTmp)
+    dfTmp <- rbind(dfTmp,data.frame(resample=c("bootstrap","train/test")[iResample],attr=c("k","err0","err1","errTot"),value=c(knnTuneRes$best.parameters[,"k"],tblTmp[1,2]/sum(tblTmp[1,]),tblTmp[2,1]/sum(tblTmp[2,]),1-sum(diag(tblTmp))/sum(tblTmp))))
+  }
+}
+ggplot(dfTmp,aes(x=attr,y=value))+geom_jitter()+scale_y_log10(breaks=c(0.01,0.05,0.1))+facet_wrap(~resample)
+
+
+Overall, I have enjoyed analyzing data in this class. I want to thank you for your support through out the course, have a wonderful summer time!
+Good luck to me.
+
+# Extra 15 points: variable importance in SVM
+
+SVM does not appear to provide readily available tools for judging relative importance of different attributes in the model.  Please evaluate here an approach similar to that employed by random forest where importance of any given attribute is measured by the decrease in model performance upon randomization of the values for this attribute.
+
+1
+# An afterword on the computational demands of the final exam
+
+Because during previous offerings of this course there were always several posts on piazza regarding how long it takes to fit various classifiers to the census income dataset we have added this note here.
+
+First of all, we most definitely do *not* expect you to *have* to buy capacity from AWS to complete this assignment. You certainly can if you want to, but this course is not about that and census income is really not *that* big of a dataset to require it. Something reasonable/useful can be accomplished for this data with middle of the road hardware. For instance, knitting of the entire official solution for the final exam on 8Gb RAM machine with two i5-7200u cores takes under hour and a half using single-threaded R/Rstudio and this includes both extra points problems as well as various assessments of the performance of different models as function of data size and so on.
+
+Second, your solution should not take hours and hours to compile. If it does, it could be that it is attempting to do too much, or something is implemented inefficiently, or just plain incorrectly - it is impossible for us to comment on this until we see the code when we grade it. In general, it is often very prudent to "start small" -- fit your model on a random subset of data small enough for the model fitting call to return immediately, check how model performance (both in terms of error and time it takes to compute) scales with the size of the data you are training it on (as you increase it in size, say, two-fold several times), for tuning start with very coarse grid of parameter values and given those results decide what it right for you, etc.
+
+Lastly, making the decision about what is right for the problem at hand, how much is enough, etc. is inherent in this line of work. If you choose to conduct model tuning on a subset of the data - especially if you have some assessment of how the choice of tuning parameter and test error is affected by the size of training dataset - it could be a very wise choice.  If it is more efficient for you to knit each problem separately, by all means feel free to do that - just remember to submit each .Rmd and HTML file that comprises your entire solution. On that note, if you end up using any of the unorthodox setups for your calculations (e.g. AWS, parallel processing, multiple machines, etc. - none of which are essential for solving it correctly) please be sure that when we grade we have every relevant piece of code available - we won't be able to grade your work if we are not clear about how the results were obtained.
+
+In the end, the final exam asks you to assess performance of three classification technologies on census income dataset and compare that to the results already reported for it. It is very much up to you how exactly you want to go about it.  There could be many versions of correct and informative solution for that (as there could be just as many if not more that are completely wrong).
+
+As always, best of luck - we are practically done here!

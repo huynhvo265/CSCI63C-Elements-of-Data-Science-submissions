@@ -1,0 +1,187 @@
+---
+Student: Huynh Vo
+title: 'CSCI E-63C: Week 3 Assignment'
+output:
+  html_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE, results='hide'}
+library(ggplot2)
+library(ISLR)
+library(car)
+library(corrplot)
+knitr::opts_chunk$set(echo = TRUE)
+```
+Note: Please consider piazza ID: @125 Regards.
+
+
+# Preface
+
+The goal of this week assignment is to practice basic tools available in R for developing linear regression models with one or more variables, conduct visual and quantitative evaluation of their relative performance and reason about associated tradeoffs.  We will continue working with abalone dataset (that you have already downloaded and used for the previous week assignment) and will use some of the variables available there to develop model of snail age.  Given the simplicity of the measurements available in this dataset (essentially just dimensions and masses of various compartments of the mollusc) and potential variability in growth rates due to differences in environmental conditions (e.g. location, temperature, nutrients, etc.) that are not captured in this dataset, we should expect substantial fraction of variability in abalone age to remain unexplained as part of this exercise.  Furthermore, given strong correlations between some of the predictors in this dataset it is possible that only a small number of those could be justifiably used in the model (for the reasons related to collinearity - see Ch.3.3.3 section 6 of ISLR).
+
+```{r abalone, echo=FALSE, results='hide'}
+abaDat <- read.table("/Users/Huynhvalentine/Downloads/abalone.txt",sep=",")
+colnames(abaDat) <- c("sex","len","diam","h","ww","sw","vw","sh","rings")
+abaDat$age <- abaDat$rings+1.5
+dim(abaDat)
+```
+
+Here an uninspiring example of the model of shell length and diameter is used to illustrate R tools that will be needed for this assignment. Please note that by this time `abaDat` dataset has been already created and corresponding columns have been named `len` and `diam` respectively -- the variable names in your code likely will be different.  Then a simple linear model can be fit using function `lm()` and summarized using `summary`:
+
+```{r diamlensumm}
+summary(lm(len~diam,abaDat))
+```
+
+The plot of predictor and response with regression line added to it can be generated using standard R functions `plot` and `abline`:
+
+```{r diamlenplot}
+plot(abaDat[,c("diam","len")])
+abline(lm(len~diam,abaDat))
+```
+
+Diagnostic plots for this model can be obtained also by the call to `plot` with `lm()` result as input:
+
+```{r diamlendiag,fig.width=8,fig.height=8}
+old.par <- par(mfrow=c(2,2))
+plot(lm(len~diam,abaDat))
+par(old.par)
+```
+
+R functions `confint` returns confidence intervals for model parameters and `predict` (with appropriate parameters) returns model predictions for the new data and corresponding estimates of uncertainty associated with them:
+
+```{r diamlenintls}
+confint(lm(len~diam,abaDat))
+predict(lm(len~diam,abaDat),newdata=data.frame(diam=c(0.2,0.3,0.4,0.5)),interval='confidence')
+predict(lm(len~diam,abaDat),newdata=data.frame(diam=c(0.2,0.3,0.4,0.5)),interval='prediction')
+```
+
+# Problem 1: model of age and shell weight (30 points)
+
+Here we will identify variable most correlated with the outcome (abalone age), build simple linear model of snail age (rings+1.5 as per dataset description) as function of this variable, evaluate model summary and diagnostic plots and assess impact of using log-transformed (instead of untransformed) attributes on the model peformance.  The following steps provide approximate outline of tasks for achieving these goals:
+
+1. Calculate correlations between all *continuous* attributes in this dataset.  Given potential non-linear relationship between some of the attributes and snail age, it might be prudent to use both Pearson and Spearman correlations to determine which variable is most robustly correlated with age.
+Answer:
+First, we need to clean the abalone data:
+```{r}
+sapply(abaDat, mode)
+unique(abaDat)
+na.omit(abaDat)
+```
+
+Now, we look at the correlation between age and remaining continuous attributes:
+```{r}
+cor(abaDat$diam, abaDat$age, method = c("pearson", "kendall", "spearman"))
+cor.test(abaDat$diam, abaDat$age, method=c("pearson", "kendall", "spearman"))
+```
+
+I can find the correlation between 2 variables for 10 variables in abaDat data, however that would take a lot of effort, instead I used corrplot to visualize the correlation between variables in abaDat table. As you can see the correlation plot below, the sex variable has no correlation because it is categorical value, the rest are contiuous attributes. The closer the result of correlation is to 1, the more correlation between 2 variables. Looking at the age attritube, we see that rings and sh (as known as shell weight) are most robustly correlated with age. Next is diam, len, h, ww, vw, and sw.
+
+```{r}
+M <- cor(abaDat[ , c("len","diam","h","ww","sw","vw","sh","rings")])
+corrplot(M, method = "number")
+```
+2. Fit linear model of age as outcome and shell weight as predictor using R function `lm`, display the result using `summary` function, use its output to answer the following questions:
+Answer:
+```{r}
+lm(age~sh,abaDat)
+summary(lm(age~sh,abaDat))
+```
+
+   + Does this predictor explain significant amount of variability in response?  I.e. is there significant association between them?
+   Answer: Yes, this predictor explains some amount of variability in response in terms of age, but it is not a significant association between them. We also see that through the correlation plot between these 2 attributes (0.63.)
+   
+   + What is the RSE and $R^2$ of this model?  Remember, you can find them in the `summary` output or use `sigma` and `r.sq` slots in the result returned by `summary` instead
+   Answer: For this model, the Multiple R-squared is 0.3938, the Adjusted R-squared is  0.3937 which is low. The closer it is to 1, the more fitted the model is. Our predictions are not as close as possible to the observed values.
+   
+   + What are the model coefficients and what would be their interpretation? What is the meaning of the intercept of the model, for example?  How sensible is it?
+    Answer: This model has an equation Age = 14.5*shellweight + 7.9 
+    The intercept is the grand mean of the outcome variable Age; the linear term in the model describes by how much we expect the measurements of Age to deviate from that mean depending of Shell weight (intercept = 7.9)
+
+3. Create scatterplot of age and shell weight and add regression line from the model to the plot using `abline` function
+    Answer:
+```{r shageplot}
+plot(abaDat[,c("sh","age")])
+abline(lm(age~sh,abaDat))
+```
+
+4. Create diagnostic plots of the model and comment on any irregularities that they present.  For instance, does plot of residuals vs. fitted values suggest presence of non-linearity that remained unexplained by the model?  How does it compare to the plot of the predictor and outcome with regression line added to it that was generated above?
+    Answer:
+```{r shagediag,fig.width=8,fig.height=8}
+old.par1 <- par(mfrow=c(2,2))
+plot(lm(age~sh,abaDat))
+par(old.par1)
+```
+The plot of residuals vs. fitted values suggests the presence of non-linearity that remains unexplained by the model. The data systematically deviates from the model. The spread is approximately constant, but the conditional mean is not.
+5. Use function `confint` to obtain confidence intervals on model parameters
+    Answer:
+```{r shageintls}
+confint(lm(age~sh,abaDat))
+```
+6. Use this model and `predict` function to make predictions for shell weight values of 0.1, 0.2 and 0.3. Use `confidence` and `prediction` settings for parameter `interval` in the call to `predict` to obtain confidence and prediction intervals on these model predictions.  Explain the differences between interpretation of:
+Answer:
+```{r}
+predict(lm(age~sh,abaDat),newdata1=data.frame(sh=c(0.1,0.2,0.3)),interval='confidence')
+predict(lm(age~sh,abaDat),newdata1=data.frame(sh=c(0.1,0.2,0.3)),interval='prediction')
+```
+    + confidence intervals on model parameters and model predictions
+    Answer: Confidence intervals tell how well the model have identify the mean.The main idea is that the confidence interval tells the likely position of the true population parameter is in this interval.
+    + confidence and prediction intervals on model predictions
+    Answer: Prediction intervals explain where you can expect to see the next data point sampled. The main point is that the prediction interval tells the distribution of values, not the uncertainty in determining the population mean. 
+    + Comment on whether confidence or prediction intervals (on predictions) are wider and why
+    Answer: For this model, prediction interval is wider. The confidence interval tells the likely location of the true population parameter. Prediction intervals consider both the uncertainty in knowing the value of the population mean, in addition to the data scatter. Therefore, a prediction interval is always wider than a confidence interval. 
+# Problem 2: model using log-transformed attributes (20 points)
+
+1. Use `lm()` to fit a regression model of *log-transformed* age as linear function of *log-transformed* shell weight and use `summary` to evaluate its results.  Can we compare fits obtained from using untransformed (above) and log-transformed attributes?  Can we directly compare RSE from these two models?  What about comparing $R^2$?  What would we conclude from this? (Please consult ISLR Ch.3.1.3 if unsure)  What would be the physical meaning of model coefficients this time?  What does model intercept represent in this case, for example?  How sensible is this and how does it compare to that from the fit on untransformed data?
+    Answer: 
+    
+```{r}
+lm(log(age)~log(sh),abaDat)
+summary(lm(log(age)~log(sh),abaDat))
+```   
+
+Comparing to unstransformed attributes:
+```{r}
+lm(age~sh,abaDat)
+summary(lm(age~sh,abaDat))
+```   
+Yes, we can compare fits obtained from using untransformed (above) and log-transformed attributes. Yet, we cant directly compare RSE from these two models because they are 2 different values.  The $R^2$ is close, yet different between log-transformed and untransformed attributes. We can conclude that both log-transformed and untransformed attributes provide the same interpretation for the model in the end although they provide different model coefficients and values.
+
+2. Create a XY-scatterplot of log-transformed predictor and response and add corresponding regression line to it.  Compared it to the same plot but in untransformed coordinates obtained above.  What would you conclude from such comparison?
+Answer:
+
+```{r logshageplot}
+plot(log(abaDat[,c("sh","age")]))
+abline(lm(log(age)~log(sh),abaDat))
+```
+Both log-transformed and untransformed plots have positive slope, although the scale is different. The interpretation is the same.
+3. Make diagnostic plots for model fit on log-transformed age and shell weight.  Compare their appearance to that for the model using original scale of measurements. What would you conclude from this comparison about their relative quality?
+Answer:
+```{r logshagediag,fig.width=8,fig.height=8}
+old.par2 <- par(mfrow=c(2,2))
+plot(lm(log(age)~log(sh),abaDat))
+par(old.par2)
+```
+After looking at diagnostic diagram of log-transformed data, the relative quality is the same compared to untransformed attributes. 
+Log of the likelihood function (does not change anything as far as maximum is concerned: log is a monotonous function, but math becomes easier. 
+
+# Problem 3: Adding second variable to the model (10 points)
+
+To explore effects of adding another variable to the model, continue using log-transformed attributes and fit a model of log-transformed age as a function of shell weight and shucked weight (both log-transformed also).  Just an additive model -- no interaction term is necessary at this point. Please obtain and evaluate the summary of this model fit, confidence intervals on its parameters and its diagnostic plots. Where applicable, compare them to the model obtained above and reflect on pros and cons of including shucked weight as another variable into the model.
+
+Below is fitted model for log-transformed age as a function of shucked weight:
+```{r}
+lm(log(age)~log(sh)+log(sw),abaDat)
+summary(lm(log(age)~log(sh)+log(sw),abaDat))
+``` 
+
+
+Diagnostic plot:
+
+```{r logshswagediag,fig.width=8,fig.height=8}
+old.par3 <- par(mfrow=c(2,2))
+plot(lm(log(age)~log(sh)+log(sw),abaDat))
+par(old.par3)
+```
+From the summary() function, this Multiple R-squared:  0.6035  is closer to 1, comparing to the function without shucked weight. There is a positive effect when adding the shucked weight variable to the model, which is shown through the diagnostic plots, except the plot of residual vs. leverage. There seems to be more outliers when considering the shucked weight into the model calculation. 
+The end.

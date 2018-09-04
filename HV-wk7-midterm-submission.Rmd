@@ -1,0 +1,530 @@
+---
+title: "CSCI E-63C Week 7 midterm exam Student: Huynh Vo"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+library(glmnet)
+library(leaps)
+library(ggplot2)
+library(MASS)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The goal of midterm is to apply some of the methods for supervised and unsupervised analysis to a new dataset.  We will work with data characterizing the relationship between wine quality and its analytical characteristics [available at UCI ML repository](https://archive.ics.uci.edu/ml/datasets/Wine+Quality) as well as in this course website on canvas.  The overall goal will be to use data modeling approaches to understand which wine properties influence the most wine quality as determined by expert evaluation.  The output variable in this case assigns wine to discrete categories between 0 (the worst) and 10 (the best), so that this problem can be formulated as classification or regression -- here we will stick to the latter and treat/model outcome as continuous variable.  For more details please see [dataset description available at UCI ML](https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality.names) or corresponding file in this course website on canvas.  Please note that there is another, much smaller, dataset on UCI ML also characterizing wine in terms of its analytical properties -- make sure to use correct URL as shown above, or, to eliminate possibility for ambiguity, the data available on the course website in canvas -- the correct dataset contains several thousand observations. For simplicity, clarity and to decrease your dependency on the network reliability and UCI ML availability you are advised to download data made available in this course website to your local folder and work with this local copy.
+
+There are two compilations of data available under the URL shown above as well as in the course website in canvas -- separate for red and for white wine -- please develop models of wine quality for each of them, investigate attributes deemed important for wine quality in both and determine whether quality of red and white wine is influenced predominantly by the same or different analytical properties (i.e. predictors in these datasets).  Lastly, as an exercise in unsupervised learning you will be asked to combine analytical data for red and white wine and describe the structure of the resulting data -- whether there are any well defined clusters, what subsets of observations they appear to represent, which attributes seem to affect the most this structure in the data, etc.
+
+Finally, as you will notice, the instructions here are terser than in the previous homework assignments. We expect that you use what you've learned in the class to complete the analysis and draw appropriate conclusions based on the data.  All approaches that you are expected to apply here have been exercised in the preceeding weekly assignments -- please feel free to consult your submissions and/or official solutions as to how they have applied to different datasets.  As always, if something appears to be unclear, please ask questions -- we may change to private mode those that in our opinion reveal too many details as we see fit.
+
+# Sub-problem 1: load and summarize the data (20 points)
+
+Download and read in the data, produce numerical and graphical summaries of the dataset attributes, decide whether they can be used
+for modeling in untransformed form or any transformations are justified, comment on correlation structure and whether some of the predictors suggest relationship with the outcome.
+
+```{r}
+redwine <- read.csv("/Users/Huynhvalentine/Downloads/winequality-red.csv", sep=";")
+head(unique(redwine))
+head(na.omit(redwine))
+sapply(redwine,class)
+as.numeric(redwine$quality)
+summary(redwine)
+whitewine <- read.csv("/Users/Huynhvalentine/Downloads/winequality-white.csv", sep=";")
+head(unique(whitewine))
+head(na.omit(whitewine))
+head(whitewine)
+sapply(whitewine,class)
+as.numeric(whitewine$quality)
+summary(whitewine)
+```
+After importing datasets for red wine and white wine, removing duplicate rows and removing N/A rows, the redwine dataset has less observations compared to whitewine dataset (1599 < 4898). The red wine data and white wine data quality attribute seems to be a categorical attribute as the final outcome after considering all other attributes. Quality is the output variable and it is ranged from 0 to 10. The remaining attributes are based on physicochemical tests to be determined. To see if all input varialbes are relevant to each other, I use cor plot showing the correlation between attributes.
+```{r}
+library(corrplot)
+redcor <- cor(redwine)
+corrplot(redcor, method="number", order="FPC")
+title(main= "red wine correlation chart")
+whitecor <-cor(whitewine)
+corrplot(whitecor, method="number", order="FPC")
+title(main= "white wine correlation chart")
+```
+Looking at a generated correlation plot, for redwine, there does not seem to be many attributes that are correlated to the quality attribute. At least we have an overview of the datasets through summary() and cor() functions in R.
+What stands out for the red wine dataset is that citric.acid is correlated with fixed.acidity (0.67), density is correlated to fixed.acidity (0.67), free.sulfur.dioxide is correlated to total.sulfur.dioxide (0.67), and alcohol is correlated to quality(0.49. The pH attribute seems having more negative correlation in the plot. Next is volatile.acidity attribute. 
+What stands out for the white wine dataset is that alcohol is correlated to quality (0.44), free.sulfur.dioxide is correlated to total.sulfur.dioxide (0.62), density is correlated to residual.sugar (0.84) and to total.sulfur.dioxide(0.53). The pH attribute seems having more negative correlation in the plot. 
+Overall, looks like alcohol level is most likely sugguest the relation to the quality outcome, base on cor plot.
+
+# Sub-problem 2: choose optimal models by exhaustive, forward and backward selection (20 points)
+
+Use `regsubsets` from library `leaps` to choose optimal set of variables for modeling wine quality for red and white wine (separately), describe differences and similarities between attributes deemed important in each case.
+
+
+```{r regsubsetsredwine}
+lnredwine <- log(redwine)
+lnredwine <-lnredwine[is.finite(rowSums(lnredwine)),]
+summaryMetrics <- NULL
+whichAll <- list()
+for ( myMthd in c("exhaustive", "backward", "forward") ) {
+  rsRes <- regsubsets(quality~.,lnredwine,method=myMthd,nvmax=11)
+  summRes <- summary(rsRes)
+  whichAll[[myMthd]] <- summRes$which
+  for ( metricName in c("rsq","rss","adjr2","cp","bic") ) {
+    summaryMetrics <- rbind(summaryMetrics,
+      data.frame(method=myMthd,metric=metricName,
+                nvars=1:length(summRes[[metricName]]),
+                value=summRes[[metricName]]))
+  }
+}
+ggplot(summaryMetrics,aes(x=nvars,y=value,shape=method,colour=method)) + geom_path() + geom_point() + facet_wrap(~metric,scales="free") +   theme(legend.position="top")
+```
+```{r redwineWhich}
+old.par <- par(mfrow=c(2,2),ps=16,mar=c(5,7,2,1))
+for ( myMthd in names(whichAll) ) {
+  image(1:nrow(whichAll[[myMthd]]),
+        1:ncol(whichAll[[myMthd]]),
+        whichAll[[myMthd]],xlab="N(vars)",ylab="",
+        xaxt="n",yaxt="n",breaks=c(-0.5,0.5,1.5),
+        col=c("white","gray"),main=myMthd)
+  axis(1,1:nrow(whichAll[[myMthd]]),rownames(whichAll[[myMthd]]))
+  axis(2,1:ncol(whichAll[[myMthd]]),colnames(whichAll[[myMthd]]),las=2)
+}
+par(old.par)
+```
+
+```{r regsubsetswhitewine}
+lnwhitewine <- log(whitewine)
+lnwhitewine <-lnwhitewine[is.finite(rowSums(lnwhitewine)),]
+summaryMetrics <- NULL
+whichAll <- list()
+for ( myMthd1 in c("exhaustive", "backward", "forward") ) {
+  rsRes <- regsubsets(quality~.,lnwhitewine,method=myMthd1,nvmax=11)
+  summRes <- summary(rsRes)
+  whichAll[[myMthd1]] <- summRes$which
+  for ( metricName in c("rsq","rss","adjr2","cp","bic") ) {
+    summaryMetrics <- rbind(summaryMetrics,
+      data.frame(method=myMthd1,metric=metricName,
+                nvars=1:length(summRes[[metricName]]),
+                value=summRes[[metricName]]))
+  }
+}
+ggplot(summaryMetrics,aes(x=nvars,y=value,shape=method,colour=method)) + geom_path() + geom_point() + facet_wrap(~metric,scales="free") +   theme(legend.position="top")
+```
+
+```{r whitewineWhich}
+old.par1 <- par(mfrow=c(2,2),ps=16,mar=c(5,7,2,1))
+for ( myMthd1 in names(whichAll) ) {
+  image(1:nrow(whichAll[[myMthd1]]),
+        1:ncol(whichAll[[myMthd1]]),
+        whichAll[[myMthd1]],xlab="N(vars)",ylab="",
+        xaxt="n",yaxt="n",breaks=c(-0.5,0.5,1.5),
+        col=c("white","gray"),main=myMthd1)
+  axis(1,1:nrow(whichAll[[myMthd1]]),rownames(whichAll[[myMthd1]]))
+  axis(2,1:ncol(whichAll[[myMthd1]]),colnames(whichAll[[myMthd1]]),las=2)
+}
+par(old.par1)
+```
+Using different methods for both red wine and white wine datasets, I used nvmax as 11 representing 11 attributes (nvmax=11). I am aware that when I look at the correlation plot I see that some negative correlation also exists, therefore it might be not neccessary to include all 11 attributes when choosing methods. With regsubsets methods, I see that at attribute 7 is when the graph starts to stabilize. Seems like 7 attributes when applying models should work for the red wine dataset and also white wine dataset because that is when the graphs look more stabilized, no need up to 11 attributes. All models came with modeling of a very comparable performace by every associated metric. 
+
+The red wine dataset, from which attribute of the summary, the red wine plots illustrate that the variables chosen from descending order are alcohol, volatile.acidity, sulphates, pH, chlorides, total.sulfur.dioxide, free.sulfur.dioxide, citric.acid, residual.sugar, fixed.acidity and lastly is density to be chosen. 
+
+For white wine dataset, from which attribute of the summary, there are different prioritazions for attributes for different methods. In general, the white wine plots illustrate that the variables chosen from descending order are alcohol, volatile.acidity, free.sulfur.dioxide, residual.sugar, density, sulphates, pH, chlorides, total.sulfur.dioxide, citric.acid, and lastly is fixed.acidity get chosen. 
+
+The similarities between both the red wine and white wine datasets are alcohol and volatile.acidity which seem to have the largest loadings when modeling methods. The difference between red wine and white datasets that I found interesting is that the density of wine seems not to matter much when identifying the quality of red wine, but the density attribute is the 5th of 11 attributes to be considered in calculation when identifying the quality of white wine. That must be something to do with sugar content in white wine, and we also see that residual.sugar is the 4th of 11 attributes for white wine when determining the quality. 
+The remaining attributes in both datasets are slightly shifted but almost in similar order.
+# Sub-problem 3: optimal model by cross-validation (25 points)
+
+Use cross-validation (or any other resampling strategy of your choice) to estimate test error for models with different numbers of variables.  Compare and comment on the number of variables deemed optimal by resampling versus those selected by `regsubsets` in the previous task.  Compare resulting models built separately for red and white wine data.
+Answer:
+This is the cross-validation for red wine:
+```{r xval,fig.width=12,fig.height=8}
+xvalMSEregsubsetslnredwine <- function(nTries=30,kXval=5) {
+  retRes <- NULL
+  for ( iTry in 1:nTries ) {
+    xvalFolds <- sample(rep(1:kXval,length.out=nrow(lnredwine)))
+    # Try each method available in regsubsets
+    # to select the best model of each size:
+    for ( jSelect in c("exhaustive", "backward", "forward", "seqrep") ) {
+      mthdTestErr2 <- NULL
+      mthdTrainErr2 <- NULL
+      mthdTestFoldErr2 <- NULL
+      for ( kFold in 1:kXval ) {
+        rsTrain <- regsubsets(quality~.,lnredwine[xvalFolds!=kFold,],nvmax=11,method=jSelect)
+        # Calculate test error for each set of variables
+        # using predict.regsubsets implemented above:
+        nVarTestErr2 <- NULL
+        nVarTrainErr2 <- NULL
+        for ( kVarSet in 1:11 ) {
+          # make predictions for given number of variables and cross-validation fold:
+          kCoef <- coef(rsTrain,id=kVarSet)
+          testPred <- model.matrix(quality~.,lnredwine[xvalFolds==kFold,])[,names(kCoef)] %*% kCoef
+          nVarTestErr2 <- cbind(nVarTestErr2,(testPred-lnredwine[xvalFolds==kFold,"quality"])^2)
+          trainPred <- model.matrix(quality~.,lnredwine[xvalFolds!=kFold,])[,names(kCoef)] %*% kCoef
+          nVarTrainErr2 <- cbind(nVarTrainErr2,(trainPred-lnredwine[xvalFolds!=kFold,"quality"])^2)
+        }
+        # accumulate training and test errors over all cross-validation folds:
+        mthdTestErr2 <- rbind(mthdTestErr2,nVarTestErr2)
+        mthdTestFoldErr2 <- rbind(mthdTestFoldErr2,colMeans(nVarTestErr2))
+        mthdTrainErr2 <- rbind(mthdTrainErr2,nVarTrainErr2)
+      }
+      #cat(kXval,iTry,jSelect,dim(mthdTrainErr2),dim(mthdTestErr2),fill=TRUE)
+      # add to data.frame for future plotting:
+      retRes <- rbind(retRes,
+                    data.frame(sim=iTry,sel=jSelect,vars=1:ncol(nVarTrainErr2),mse=colMeans(mthdTrainErr2),trainTest="train"),
+                    data.frame(sim=iTry,sel=jSelect,vars=1:ncol(nVarTrainErr2),mse=colMeans(mthdTestErr2),trainTest="test"))
+      #for ( iRow in 1:nrow(mthdTestFoldErr2) ) {
+      #  retRes <- rbind(retRes,data.frame(sim=iTry,sel=jSelect,vars=1:ncol(mthdTestFoldErr2),mse=mthdTestFoldErr2[iRow,],trainTest="testFold"))
+      #}
+    }
+  }
+  retRes
+}
+# plot MSEs by training/test, number of variables:
+dfTmp <- rbind(data.frame(xvalMSEregsubsetslnredwine(30,kXval=2),xval="2-fold"),
+               data.frame(xvalMSEregsubsetslnredwine(30,kXval=5),xval="5-fold"),
+               data.frame(xvalMSEregsubsetslnredwine(30,kXval=10),xval="10-fold"))
+ggplot(dfTmp,aes(x=factor(vars),y=mse,colour=sel)) + geom_boxplot()+facet_wrap(~trainTest+xval)
+```
+
+Test error noticeably improves by increasing model size up to about 7 or 8 variables for the red wine data. The median test MSE of the larger model is lower or comparable to the lower quartile of MSE for the smaller model. Perhaps going from 7 to 11 variables also on average decreases test MSE as well, although that decrease is small comparing to the variability observed across resampling attempts.  The test MSEs on exhaustive, backward and forward models with 7 variables are very comparable. I tried nvmax=11 and my computer took really long to train. The best results with lowest MSE is still around 7 and up attributes.
+
+Compare and comment on the number of variables deemed optimal by resampling versus those selected by `regsubsets` in the previous task. For red wine dataset, the optimal by resampling suggests 7 attributes is good enough, and so is the regsubsets in the previous task also suggests 7 attributes. 
+
+Below is the whitewine dateset with cross-validation:
+```{r}
+xvalMSEregsubsetslnwhitewine <- function(nTries=30,kXval=5) {
+  retRes <- NULL
+  for ( iTry in 1:nTries ) {
+    xvalFolds <- sample(rep(1:kXval,length.out=nrow(lnwhitewine)))
+    # Try each method available in regsubsets
+    # to select the best model of each size:
+    for ( jSelect in c("exhaustive", "backward", "forward", "seqrep") ) {
+      mthdTestErr2 <- NULL
+      mthdTrainErr2 <- NULL
+      mthdTestFoldErr2 <- NULL
+      for ( kFold in 1:kXval ) {
+        rsTrain <- regsubsets(quality~.,lnwhitewine[xvalFolds!=kFold,],nvmax=11,method=jSelect)
+        # Calculate test error for each set of variables
+        # using predict.regsubsets implemented above:
+        nVarTestErr2 <- NULL
+        nVarTrainErr2 <- NULL
+        for ( kVarSet in 1:11 ) {
+          # make predictions for given number of variables and cross-validation fold:
+          kCoef <- coef(rsTrain,id=kVarSet)
+          testPred <- model.matrix(quality~.,lnwhitewine[xvalFolds==kFold,])[,names(kCoef)] %*% kCoef
+          nVarTestErr2 <- cbind(nVarTestErr2,(testPred-lnwhitewine[xvalFolds==kFold,"quality"])^2)
+          trainPred <- model.matrix(quality~.,lnwhitewine[xvalFolds!=kFold,])[,names(kCoef)] %*% kCoef
+          nVarTrainErr2 <- cbind(nVarTrainErr2,(trainPred-lnwhitewine[xvalFolds!=kFold,"quality"])^2)
+        }
+        # accumulate training and test errors over all cross-validation folds:
+        mthdTestErr2 <- rbind(mthdTestErr2,nVarTestErr2)
+        mthdTestFoldErr2 <- rbind(mthdTestFoldErr2,colMeans(nVarTestErr2))
+        mthdTrainErr2 <- rbind(mthdTrainErr2,nVarTrainErr2)
+      }
+      #cat(kXval,iTry,jSelect,dim(mthdTrainErr2),dim(mthdTestErr2),fill=TRUE)
+      # add to data.frame for future plotting:
+      retRes <- rbind(retRes,
+                    data.frame(sim=iTry,sel=jSelect,vars=1:ncol(nVarTrainErr2),mse=colMeans(mthdTrainErr2),trainTest="train"),
+                    data.frame(sim=iTry,sel=jSelect,vars=1:ncol(nVarTrainErr2),mse=colMeans(mthdTestErr2),trainTest="test"))
+      #for ( iRow in 1:nrow(mthdTestFoldErr2) ) {
+      #  retRes <- rbind(retRes,data.frame(sim=iTry,sel=jSelect,vars=1:ncol(mthdTestFoldErr2),mse=mthdTestFoldErr2[iRow,],trainTest="testFold"))
+      #}
+    }
+  }
+  retRes
+}
+# plot MSEs by training/test, number of variables:
+dfTmp <- rbind(data.frame(xvalMSEregsubsetslnwhitewine(30,kXval=2),xval="2-fold"),
+               data.frame(xvalMSEregsubsetslnwhitewine(30,kXval=5),xval="5-fold"),
+               data.frame(xvalMSEregsubsetslnwhitewine(30,kXval=10),xval="10-fold"))
+ggplot(dfTmp,aes(x=factor(vars),y=mse,colour=sel)) + geom_boxplot()+facet_wrap(~trainTest+xval)
+```
+Test error noticeably improves by increasing model size up to about 7 or 8 variables for the white wine data set. The median test MSE of the larger model is lower or comparable to the lower quartile of MSE for the smaller model. Perhaps going from 7 to 11 variables also on average decreases test MSE as well, although that decrease is small comparing to the variability observed across resampling tries.  The test MSEs on exhaustive, backward and forward models with 7 variables are very comparable. I tried nvmax=11 and my computer took really long to train. The best results with lowest MSE is still around 7 and up attributes.
+
+Compare and comment on the number of variables deemed optimal by resampling versus those selected by `regsubsets` in the previous task. For white wine dataset, the optimal by resampling suggests 7 attributes is good enough, and so is the regsubsets in the previous task also suggests 7 attributes. 
+
+# Sub-problem 4: lasso/ridge (25 points)
+
+Use regularized approaches (i.e. lasso and ridge) to model quality of red and white wine (separately).  Compare resulting models (in terms of number of variables and their effects) to those selected in the previous two tasks (by `regsubsets` and resampling), comment on differences and similarities among them.  
+Answer:
+LASSO REGRESSION:
+Lasso model for the red wine dataset. Lasso regression is completed by glmnet with alpha=1. 
+```{r}
+x <- model.matrix(quality~.,lnredwine)[,-1]
+y <- lnredwine[,"quality"]
+lassoRes <- glmnet(x,y,alpha=1)
+plot(lassoRes)
+```
+
+
+```{r}
+cvLassoRes <- cv.glmnet(x,y,alpha=1)
+plot(cvLassoRes)
+```
+
+```{r}
+#with lambda other than default
+cvLassoRes <- cv.glmnet(x,y,alpha=1,lambda=10^((-200:20)/80))
+plot(cvLassoRes)
+cvLassoRes$lambda.min #0.003162278
+cvLassoRes$lambda.1se #0.01453784
+predict(lassoRes,type="coefficients",s=cvLassoRes$lambda.min)
+predict(lassoRes,type="coefficients",s=cvLassoRes$lambda.1se)
+```
+The plotting output of glmnet illustrates change in the contributions of each of the predictors as amout of shrinkage changes. In a lasso regression each predictor contributes more or less over the entire range of shrinkage levels.
+The output of cv.glmnet shows averages and variabilities of MSE in cross-validation across different levels of regularization. lambda.min indicates value of lambda at which the lowest average MSE has been achieved, lambda.1se shows larger lambda that have an MSE 1SD of cross-validation higher than the minimum.
+
+```{r}
+lassoResScaled <- glmnet(scale(x),y,alpha=1)
+cvLassoResScaled <- cv.glmnet(scale(x),y,alpha=1,lambda=10^((-200:20)/80))
+predict(lassoResScaled,type="coefficients",s=cvLassoResScaled$lambda.1se)
+```
+Loking at the data in the table above we see that only three attributes are correlated with the matrix. Couple lasso with Resampling, then we can run lasso on several training datasets and calculate the corresponding test MSE and frequency of inclusion of each of the coefficients in the model:
+```{r redwineExample}
+lassoCoefCnt <- 0
+lassoMSE <- NULL
+for ( iTry in 1:30 ) {
+  bTrain <- sample(rep(c(TRUE,FALSE),length.out=nrow(x)))
+  cvLassoTrain <- cv.glmnet(x[bTrain,],y[bTrain],alpha=1,lambda=10^((-120:0)/20))
+  lassoTrain <- glmnet(x[bTrain,],y[bTrain],alpha=1,lambda=10^((-120:0)/20))
+  lassoTrainCoef <- predict(lassoTrain,type="coefficients",s=cvLassoTrain$lambda.1se)
+  lassoCoefCnt <- lassoCoefCnt + (lassoTrainCoef[-1,1]!=0)
+  lassoTestPred <- predict(lassoTrain,newx=x[!bTrain,],s=cvLassoTrain$lambda.1se)
+  lassoMSE <- c(lassoMSE,mean((lassoTestPred-y[!bTrain])^2))
+}
+mean(lassoMSE)
+quantile(lassoMSE)
+lassoCoefCnt
+```
+In conclusion the lasso regression model shows that alcohol, volatile.acidity and sulphates are the more apparent attributes when modelling the red wine dataset. These results are very similar to the regsubsets model which is also shown in this report. This leads me to believe that the results are verifying each other.
+
+
+Lasso model for white wine dataset:
+```{r}
+x1 <- model.matrix(quality~.,lnwhitewine)[,-1]
+y1 <- lnwhitewine[,"quality"]
+lassoRes1 <- glmnet(x1,y1,alpha=1)
+plot(lassoRes1)
+```
+
+```{r}
+cvLassoRes1 <- cv.glmnet(x1,y1,alpha=1)
+plot(cvLassoRes1)
+```
+
+```{r}
+cvLassoRes1 <- cv.glmnet(x1,y1,alpha=1,lambda=10^((-200:20)/80))
+plot(cvLassoRes1)
+predict(lassoRes1,type="coefficients",s=cvLassoRes1$lambda.min)
+predict(lassoRes1,type="coefficients",s=cvLassoRes1$lambda.1se)
+```
+
+Similarly to what was seen above, optimal (in min-1SE sense) model by lasso includes 11 variables:
+
+```{r}
+lassoResScaled1 <- glmnet(scale(x1),y1,alpha=1)
+cvLassoResScaled1 <- cv.glmnet(scale(x1),y1,alpha=1,lambda=10^((-200:20)/80))
+predict(lassoResScaled1,type="coefficients",s=cvLassoResScaled1$lambda.1se)
+```
+
+Resampling:
+```{r}
+lassoCoefCnt1 <- 0
+lassoMSE1 <- NULL
+for ( iTry in 1:30 ) {
+  bTrain1 <- sample(rep(c(TRUE,FALSE),length.out=nrow(x)))
+  cvLassoTrain1 <- cv.glmnet(x[bTrain1,],y[bTrain1],alpha=1,lambda=10^((-120:0)/20))
+  lassoTrain1 <- glmnet(x[bTrain1,],y[bTrain1],alpha=1,lambda=10^((-120:0)/20))
+  lassoTrainCoef1 <- predict(lassoTrain1,type="coefficients",s=cvLassoTrain1$lambda.1se)
+  lassoCoefCnt1 <- lassoCoefCnt1 + (lassoTrainCoef1[-1,1]!=0)
+  lassoTestPred1 <- predict(lassoTrain1,newx=x[!bTrain1,],s=cvLassoTrain1$lambda.1se)
+  lassoMSE1 <- c(lassoMSE1,mean((lassoTestPred1-y[!bTrain1])^2))
+}
+mean(lassoMSE1)
+quantile(lassoMSE1)
+lassoCoefCnt1
+```
+In conclusion alcohol, volatile.acidity and sulphates are the more apparent attributes to modelling this dataset. This is interesting because when compared to the regsubsets modelling method the three apparent attributes were alcohol, volatile.acidity, and total.sulfur.dioxide.
+
+RIDGE REGRESSION:
+Ridge regression for red wine dataset:
+
+```{r}
+x <- model.matrix(quality~.,lnredwine)[,-1]
+y <- lnredwine[,"quality"]
+ridgeRes <- glmnet(x,y,alpha=0)
+plot(ridgeRes)
+```
+
+```{r}
+cvRidgeRes <- cv.glmnet(x,y,alpha=0)
+plot(cvRidgeRes)
+cvRidgeRes$lambda.min
+cvRidgeRes$lambda.1se
+```
+
+With default $\lambda$'s the lowest MSE is attained for the least regularized model (for the lowest $\lambda$)
+
+```{r}
+cvRidgeRes <- cv.glmnet(x,y,alpha=0,lambda=10^((-50:60)/20))
+plot(cvRidgeRes)
+cvRidgeRes$lambda.min
+cvRidgeRes$lambda.1se
+```
+
+```{r}
+predict(ridgeRes,type="coefficients",s=cvRidgeRes$lambda.min)
+predict(ridgeRes,type="coefficients",s=cvRidgeRes$lambda.1se)
+```
+
+
+```{r}
+ridgeResScaled <- glmnet(scale(x),y,alpha=0)
+cvRidgeResScaled <- cv.glmnet(scale(x),y,alpha=0,lambda=10^((-50:60)/20))
+predict(ridgeResScaled,type="coefficients",s=cvRidgeResScaled$lambda.1se)
+```
+
+Scaling the inputs makes certain attributes more apparent -- similarly to what was seen above for ridge regression
+
+```{r}
+ridgeCoefCnt <- 0
+ridgeCoefAve <- 0
+ridgeMSE <- NULL
+for ( iTry in 1:30 ) {
+  bTrain <- sample(rep(c(TRUE,FALSE),length.out=nrow(x)))
+  cvridgeTrain <- cv.glmnet(x[bTrain,],y[bTrain],alpha=0,lambda=10^((-50:50)/20))
+  ridgeTrain <- glmnet(x[bTrain,],y[bTrain],alpha=0,lambda=10^((-50:50)/20))
+  ridgeTrainCoef <- predict(ridgeTrain,type="coefficients",s=cvridgeTrain$lambda.1se)
+  ridgeCoefCnt <- ridgeCoefCnt + (ridgeTrainCoef[-1,1]!=0)
+  ridgeCoefAve <- ridgeCoefAve + ridgeTrainCoef[-1,1]
+  ridgeTestPred <- predict(ridgeTrain,newx=x[!bTrain,],s=cvridgeTrain$lambda.1se)
+  ridgeMSE <- c(ridgeMSE,mean((ridgeTestPred-y[!bTrain])^2))
+}
+ridgeCoefAve <- ridgeCoefAve / length(ridgeMSE)
+ridgeCoefAve
+mean(ridgeMSE)
+quantile(ridgeMSE)
+```
+
+In conclusion for the red wine dataset's Ridge regression, alcohol, volatile.acidity and sulphates are the more apparent attributes shown when modelling this dataset.
+
+
+
+Ridge regression for white wine dataset:
+
+```{r}
+x <- model.matrix(quality~.,lnwhitewine)[,-1]
+y <- lnwhitewine[,"quality"]
+ridgeRes1 <- glmnet(x,y,alpha=0)
+plot(ridgeRes1)
+```
+
+```{r}
+cvRidgeRes1 <- cv.glmnet(x,y,alpha=0)
+plot(cvRidgeRes1)
+cvRidgeRes1$lambda.min
+cvRidgeRes1$lambda.1se
+```
+
+With default $\lambda$'s the lowest MSE is attained for the least regularized model (for the lowest $\lambda$)
+
+```{r}
+cvRidgeRes1 <- cv.glmnet(x,y,alpha=0,lambda=10^((-50:60)/20))
+plot(cvRidgeRes1)
+cvRidgeRes$lambda.min
+cvRidgeRes$lambda.1se
+```
+
+```{r}
+predict(ridgeRes1,type="coefficients",s=cvRidgeRes1$lambda.min)
+predict(ridgeRes1,type="coefficients",s=cvRidgeRes1$lambda.1se)
+```
+
+As expected, for more regularized model (using 1SE rule) coefficients are smaller by absolute value than those at the minimum of MSE
+
+```{r}
+ridgeResScaled1 <- glmnet(scale(x),y,alpha=0)
+cvRidgeResScaled1 <- cv.glmnet(scale(x),y,alpha=0,lambda=10^((-50:60)/20))
+predict(ridgeResScaled1,type="coefficients",s=cvRidgeResScaled1$lambda.1se)
+```
+
+Scaling the inputs makes a higher impact of certain attributes more apparent -- similarly to what was seen above for lasso regression
+
+```{r}
+ridgeCoefCnt1 <- 0
+ridgeCoefAve1 <- 0
+ridgeMSE1 <- NULL
+for ( iTry in 1:30 ) {
+  bTrain1 <- sample(rep(c(TRUE,FALSE),length.out=nrow(x)))
+  cvridgeTrain1 <- cv.glmnet(x[bTrain1,],y[bTrain1],alpha=0,lambda=10^((-50:50)/20))
+  ridgeTrain1 <- glmnet(x[bTrain1,],y[bTrain1],alpha=0,lambda=10^((-50:50)/20))
+  ridgeTrainCoef1 <- predict(ridgeTrain1,type="coefficients",s=cvridgeTrain1$lambda.1se)
+  ridgeCoefCnt1 <- ridgeCoefCnt1 + (ridgeTrainCoef1[-1,1]!=0)
+  ridgeCoefAve1 <- ridgeCoefAve1 + ridgeTrainCoef1[-1,1]
+  ridgeTestPred1 <- predict(ridgeTrain1,newx=x[!bTrain1,],s=cvridgeTrain1$lambda.1se)
+  ridgeMSE1 <- c(ridgeMSE1,mean((ridgeTestPred1-y[!bTrain1])^2))
+}
+ridgeCoefAve1 <- ridgeCoefAve1 / length(ridgeMSE1)
+ridgeCoefAve1
+mean(ridgeMSE1)
+quantile(ridgeMSE1)
+```
+In conclusion for the white wine dataset, alcohol, pH, and free sulfur dioxide are the most apparent attributes to modelling this dataset.
+
+Compare resulting models (in terms of number of variables and their effects) to those selected in the previous two tasks (by `regsubsets` and resampling), these methods have common conclusion is that the most important attributes contribution to the models is alcohol with weight is 0.3. This is applicable to both red wine dataset and white wine dataset.
+# Sub-problem 5: PCA (10 points)
+
+Merge data for red and white wine (function `rbind` allows merging of two matrices/data frames with the same number of columns) and plot data projection to the first two principal components (e.g. biplot or similar plots).  Does this representation suggest presence of clustering structure in the data?  Does wine type (i.e. red or white) or quality appear to be associated with different regions occupied by observations in the plot? Please remember *not* to include quality attribute or wine type (red or white) indicator in your merged data, otherwise, apparent association of quality or wine type with PCA layout will be influenced by presence of those indicators in your data.
+
+```{r}
+mergedata <- rbind(redwine, whitewine)
+mergedata1 <- subset(mergedata, select = -c(quality))
+old.par <- par(mfrow=c(2,3),ps=16)
+pcaResTmp <- prcomp(mergedata1,scale.=TRUE)
+biplot(pcaResTmp)
+par(old.par)
+  for ( iPC in 1:2 ) {
+    cat(paste0("Ten largest by absolute value loadings, ",scale.=TRUE,"untransformed"," data -- PC",iPC,":"),fill=TRUE)
+    print(pcaResTmp$rotation[order(abs(pcaResTmp$rotation[,iPC]),decreasing=TRUE)[1:10],iPC])
+  }
+  cat("PVE by first five PCs (",scale.=TRUE,"untransformed"," data):",fill=TRUE,sep="")
+  cat(100*pcaResTmp$sdev[1:5]^2 / sum(pcaResTmp$sdev^2),fill=TRUE)
+
+par(old.par)
+```
+We see that the first principal component explains 27.5% of the variance in the data. The next principal component explains 22% of the variance, and so forth. The 1st PC is positively correlated with total.sulfur.dioxide, free.sulfur.dioxide, residual.sugar and citric.acid; yet it is negatively correlated with volatile.acidity, sulphates, and chloride . The 2nd PC is positively correlated with density, residual.sugar, fixed.acidity, sulphates, citric.acid, and volatile.acidity; yet it has negatively correlated with alcohol and pH.
+
+```{r hc4,fig.width=18,fig.height=6}
+dTmp <- dist(mergedata)
+plot(hclust(dTmp,method="complete"))
+plot(hclust(dTmp,method="average"))
+plot(hclust(dTmp,method="single"))
+plot(hclust(dTmp,method="ward.D2"))
+```
+
+```{r kmeans234,fig.width=15,fig.height=5}
+old.par <- par(mfrow=c(1,3))
+pcTmp <- prcomp(mergedata1,scale=T)
+for ( iTmp in 2:4 ) {
+  kmTmp <- kmeans(scale(mergedata1),iTmp)
+  plot(pcTmp$x[,1:2],col=kmTmp$cluster,pch=kmTmp$cluster,main=iTmp)
+  cat("k =",iTmp,fill=TRUE)
+  print(lapply(unstack(data.frame(rownames(mergedata1),kmTmp$cluster)),paste,collapse=","))
+}
+par(old.par)
+```
+The above representation suggests the presence of a clustering structure in the data.  Yes, wine type (i.e. red or white) or quality appear to be associated with different regions occupied by observations in the plot.
+# Extra 10 points: model wine quality using principal components
+
+Compute PCA representation of the data for one of the wine types (red or white) *excluding wine quality attribute* (of course!). Use resulting principal components (slot `x` in the output of `prcomp`) as new predictors to fit a linear model of wine quality as a function of these predictors.  Compare resulting fit (in terms of MSE, r-squared, etc.) to those obtained above.  Comment on the differences and similarities between these fits.
+```{r}
+redwine1 <- subset(redwine, select = -c(quality))
+old.par <- par(mfrow=c(1,2),ps=16)
+for ( axLog in c("","xy") ) {
+  plot(apply(redwine1,2,mean),apply(redwine1,2,var),log=axLog,xlab="Average",ylab="Variance")
+  text(apply(redwine1,2,mean),apply(redwine1,2,var),colnames(redwine1))
+}
+par(old.par)
+```
+The above graph tells me that total.sulfur.dioxide has the largest loading time which is different with all of the above methods. Yet, there is a common conclusion that for red wine, the density is least impacted in the models.

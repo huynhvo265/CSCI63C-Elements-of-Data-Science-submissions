@@ -1,0 +1,544 @@
+---
+title: "CSCI E-63C Week 8 Assignment"
+
+output:
+  html_document:
+    toc: true
+---
+Student: Huynh Vo
+```{r setup, include=FALSE}
+library(ggplot2)
+library(cluster)
+library(clue)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preface
+
+In this assignment we will exercise some of the measures for evaluating "goodness of clustering" presented in the lecture this week on the clusters obtained for the World Health Statistics (WHS) dataset from week 6.  Please feel free to adapt/reuse code presented in lecture slides as necessary or implementations already available in R.  All problems in this assignment are expected to be performed on *scaled* WHS data -- if somewhere it does not mention it explicitly, please assume that it is scaled data that should be used. 
+
+Lastly, as a dose of reality check: WHS is a dataset capturing variability of population health measures across more or less the entire diversity of societies in the world -- please be prepared to face the fact that resulting clustering structures are far from textbook perfect, may not be very clearly defined, etc.
+
+## Note on quakes data (and *3 extra points per problem*) 
+
+As you will notice, WHS dataset does not have the most striking cluster structure to it - at least as far as formal measurements of cluster strength that we are working with in this assignment are concerned (or the notion that there is well defined "optimal" number of clusters when split of observations into larger or smaller groups results in "worse" metrics). Not an uncommon situation for the data we have to work with at all.
+
+As an opportunity to see the output of the code that you are using/developing for this assignment when applied to a dataset with more distinct substructure (and earn extra points by doing that)  for each of the five problems there are in this assignment (four required, one for extra points) once you generated required plots for WHS dataset, adding the same kinds of plots but for a standard R dataset "quakes" will be earning *3 extra points* for each problem.  So that if everything works perfectly this could add 15 extra points to the total to this assignment (5 problems including an extra point problem times 3 extra points each) so that along with the extra 5 points problem below, this assignment has potential of adding up to 20 extra points to your homework total.
+
+Dataset "quakes" is routinely available in R upon log in - to "see" it, the following should just work without any further steps for a standard R installation:
+
+```{r,fig.width=6,fig.height=6}
+clr <- gray((quakes$depth-min(quakes$depth))/as.vector(range(quakes$depth)%*%c(-1,1)))
+plot(quakes$lat,quakes$long,col=clr)
+```
+ 
+or, similarly, if you are a ggplot fan (in which case you will know to load ggplot2 library first):
+
+```{r,fig.width=6,fig.height=6}
+ggplot(quakes,aes(x=lat,y=long,colour=depth))+geom_point()
+```
+ 
+If you write your code with reusability in mind, applying it to "quakes" should be just a straightforward drop in replacement of WHS data frame with that of "quakes".  You will see that the subclasses of observations are so well defined in "quakes" that is almost boring in its own way.  Nothing is perfect in this world, but you should see more interesting behavior of CH index in this case, for example.
+
+To get the most (in terms of learning and points) out of this exercise (applying the same methods to two different datasets) please consider this as an opportunity to reflect on the differences in the behaviour / outcome of the same method when applied to two different datasets.  Think (you don't have to answer in writing to these -- they are just to help you spot the differences and interpret them) about questions such as:
+
+* What would be the behaviour of those metrics if the "true" number of clusters was two?
+* For the quakes dataset -- what subsets of observations correspond to the clusters found by K-means / hierarchical clustering?
+* Do they correspond to visually apparent groups of observations?  Quakes is relatively low dimensional dataset after all -- location in 3D and magnitude, plus number of stations highly correlated with magnitude.
+* How are those numbers of clusters reflected in the plots of "clustering strength" metrics (CH-index, gap statistic etc.)?
+* Are there any attributes in quakes dataset that are skewed enough to justify data transformation?  What would be an effect of that?
+* Back to WHS dataset -- what are the differences in the behavior of those metrics (CH-index, etc.) between quakes and WHS dataset?
+
+Once again, the complete answer to the extra points question does *not* have to include written answers to each (or any) of these six questions above, but it should provide some form of the summary of the insights you have developed from comparing these results for these two datasets.
+
+# Problem 1: within/between cluster variation and CH-index (15 points)
+
+Present plots of CH-index as well as (total) within and between cluster variance provided by K-means clustering on scaled WHS data for 2 through 20 clusters.  Choose large enough value of `nstart` for better stability of the results across multiple trials and evaluate stability of those results across several runs.  Discuss the results and whether the shape of the curves suggest specific number of clusters in the data.
+
+
+Answer:
+FOR WHS DATA:
+First, I read WHS data and scale it.
+
+```{r}
+WHS <- read.table("/Users/Huynhvalentine/Downloads/whs2016_AnnexB-data-wo-NAs.txt",sep="\t",header=TRUE,quote="")
+WHS1 <- na.omit(WHS)
+WHS2 <- scale(WHS1)
+head(WHS2)
+```
+Below, I presented plots of the CH-index as well as (total) within and between cluster variance provided by K-means clustering on scaled WHS data for 2 through 20 clusters. I chose value of nstart = 200 for better stability of the results across multiple trials.The stabilities of these results are consistent across several runs. 
+
+
+Below is within cluster variance:
+Below is 1st run:
+```{r}
+w=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+  w[k] = kf$tot.withinss
+}
+plot(1:20,w,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[within]), main='within-cluster variation for WHS data')
+```
+
+
+Below is 2nd run to see if the result is stable. Yes, the result is stable.
+ 
+```{r}
+w=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+  w[k] = kf$tot.withinss
+}
+plot(1:20,w,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[within]), main='within-cluster variation 2nd time for WHS data')
+```
+
+
+Below is between cluster variance:
+Below is 1st run:
+```{r}
+btw=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+btw[k] = kf$betweenss }
+plot(1:20,btw,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[between]), main='between-cluster variation for WHS data')
+```
+```{r}
+btw=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+btw[k] = kf$betweenss }
+plot(1:20,btw,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[between]), main='between-cluster variation 2nd time for WHS data')
+```
+
+
+Below is CH-index:
+Below is 1st run:
+
+```{r}
+chidx=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+chidx[k] = (kf$betweenss/(k-1))/(kf$tot.withinss/(length(WHS2)-k))
+}
+# undefined at k=1:
+plot(2:20,chidx[-1],type="b", lwd=2, pch=19, xlab="K",
+       ylab="CH index", main='CH-index for WHS data')
+```
+
+
+Below is 2nd run to see if the result is stable. Yes, the result is stable.
+```{r}
+chidx=numeric(20)
+for ( k in 2:20 ) {
+kf=kmeans(WHS2,k,nstart=200) 
+chidx[k] = (kf$betweenss/(k-1))/(kf$tot.withinss/(length(WHS2)-k))
+}
+# undefined at k=1:
+plot(2:20,chidx[-1],type="b", lwd=2, pch=19, xlab="K",
+       ylab="CH index", main='CH-index 2nd time for WHS data')
+```
+
+
+The shape of the curves suggest 2 clusters in the WHS data because that is where the elbow of the graphs are.
+
+
+NOW IS FOR QUAKES DATA:
+Below is within cluster variance:
+Below is 1st run:
+```{r}
+w1=numeric(20)
+for ( k in 2:20 ) {
+kf1=kmeans(scale(quakes),k,nstart=200) 
+  w1[k] = kf1$tot.withinss
+}
+plot(1:20,w1,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[within]), main='within-cluster variation for Quakes data')
+```
+
+
+Below is 2nd run to see if the result is stable. Yes, the result is stable.
+ 
+```{r}
+w1=numeric(20)
+for ( k in 2:20 ) {
+kf1=kmeans(scale(quakes),k,nstart=200) 
+  w1[k] = kf1$tot.withinss
+}
+plot(1:20,w1,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[within]), main='within-cluster variation 2nd time for Quakes data')
+```
+
+
+Below is between cluster variance:
+Below is 1st run:
+```{r}
+btw2=numeric(20)
+for ( k in 2:20 ) {
+kf2=kmeans(scale(quakes),k,nstart=200) 
+btw2[k] = kf2$betweenss }
+plot(1:20,btw2,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[between]), main='between-cluster variation for Quakes data')
+```
+
+
+Below is 2nd run:
+```{r}
+btw2=numeric(20)
+for ( k in 2:20 ) {
+kf2=kmeans(scale(quakes),k,nstart=200) 
+btw2[k] = kf2$betweenss }
+plot(1:20,btw2,type="b",lwd=2,pch=19,xlab="K", ylab=expression(SS[between]), main='between-cluster variation 2nd time for Quakes data')
+```
+
+
+Below is CH-index:
+Below is 1st run:
+
+```{r}
+chidx=numeric(20)
+for ( k in 2:20 ) {
+kf3=kmeans(scale(quakes),k,nstart=200) 
+chidx[k] = (kf3$betweenss/(k-1))/(kf3$tot.withinss/(length(scale(quakes))-k))
+}
+# undefined at k=1:
+plot(2:20,chidx[-1],type="b", lwd=2, pch=19, xlab="K",
+       ylab="CH index", main='CH-index for Quakes data')
+```
+
+
+Below is 2nd run to see if the result is stable. Yes, the result is stable.
+
+```{r}
+chidx=numeric(20)
+for ( k in 2:20 ) {
+kf3=kmeans(scale(quakes),k,nstart=200) 
+chidx[k] = (kf3$betweenss/(k-1))/(kf3$tot.withinss/(length(scale(quakes))-k))
+}
+# undefined at k=1:
+plot(2:20,chidx[-1],type="b", lwd=2, pch=19, xlab="K",
+       ylab="CH index", main='CH-index for Quakes data')
+```
+
+Plots of CH-index as well as (total) within and between cluster variance provided by K-means clustering on scaled WHS data for 2 through 20 clusters are presented for WHS data and Quakes data.
+The shape of the curves in both CH-index, between and within graphs shows 4 clusters as the elbow in both the WHS and the Quakes data. 
+
+# Problem 2: gap statistics (15 points)
+
+Using code provided in the lecture slides for calculating gap statistics or one of its implementations available in R (e.g. `clusGap` from library `cluster`) compute and plot gap statistics for K-means clustering of scaled WHS data for 2 through 20 clusters.  Discuss whether it indicates presence of clearly defined cluster structure in this data.
+Answer: 
+FOR WHS DATA:
+Based on the plot gap statistics for K-means clustering of scaled WHS data for 2 through 20 clusters, it indicates presence of clearly defined 4 clusters structure in this data. However, when we try to see the output of the result, Rstudio indicates 1 cluster, it could be due to the shallowness of the clusters.
+```{r}
+# takes matrix of observations of p variables (points in # p-dimensional space: a row=point), generates the same # number of p-dimensional points randomly and uniformly # scattered in the bounding box: 
+lw.unif=function(m,K,N=19,...) {
+w=numeric(N)
+for ( i in 1:N ) {
+  m.new=apply(m,2,function(x) { 
+    runif(length(x),min=min(x),max=max(x))
+  })
+# ellipsis allows caller
+# to pass any of the arguments:
+w[i] = kmeans(m.new,K,iter.max=30)$tot.withinss
+}
+return( list(LW=mean(w),SE=sd(w)/sqrt(N)) ) }
+# computes the gap and the LogWunif SE # for different K:
+gap = numeric(20)
+se = numeric(20)
+for ( k in 1:20 ) { 
+  kf=kmeans(WHS2,k,nstart=200) 
+  sim = lw.unif(WHS2,k,nstart=200) 
+  gap[k] = sim$LW - kf$tot.withinss
+  se[k] = sim$SE
+}
+plot(1:20, gap, pch=19, type="b", xlab= 'K', ylab='Gap Statistics', main='WHS Gap plot') 
+arrows(1:20, gap-se, 1:20, gap+se, length=0.09, angle=90, code=3)
+
+# find optimal K:
+min(which(gap[-length(gap)]>=(gap-se)[-1]))
+```
+
+
+For Quakes data:
+```{r}
+# takes matrix of observations of p variables (points in # p-dimensional space: a row=point), generates the same # number of p-dimensional points randomly and uniformly # scattered in the bounding box: 
+lw.unifQK=function(m,K,N=19,...) {
+w=numeric(N)
+for ( i in 1:N ) {
+  m.new=apply(m,2,function(x) { 
+    runif(length(x),min=min(x),max=max(x))
+  })
+# ellipsis allows caller
+# to pass any of the arguments:
+w[i] = kmeans(m.new,K,iter.max=30)$tot.withinss
+}
+return( list(LW=mean(w),SE=sd(w)/sqrt(N)) ) }
+# computes the gap and the LogWunif SE # for different K:
+QKgap = numeric(20)
+QKse = numeric(20)
+for ( k in 1:20 ) { 
+  QKkf=kmeans(scale(quakes),k,nstart=200) 
+  QKsim = lw.unifQK(scale(quakes),k) 
+  QKgap[k] = QKsim$LW - log(QKkf$tot.withinss)
+  QKse[k] = QKsim$SE
+}
+plot(1:20, gap, pch=19, type="b", xlab= 'K', ylab='Gap Statistics', main='Quakes Gap plot') 
+arrows(1:20, QKgap-QKse, 1:20, QKgap+QKse, length=0.09, angle=90, code=3)
+
+# find optimal K:
+min(which(QKgap[-length(QKgap)]>=(QKgap-QKse)[-1]))
+```
+The result shows there is only 1 cluster for both the WHS data and Quakes data. The results are different compared to problem 1 where it was suggested 4 clusters for WHS data and 4 clusters for Quakes data. This could be due to the shallowness in the hierachical clustering.
+
+# Problem 3: stability of hierarchical clustering (15 points)
+
+For top 2, 3 and 4 clusters (as obtained by `cutree` at corresponding levels of `k`) found by Ward method in `hclust` and by K-means when applied to the scaled WHS data compare cluster memberships between these two methods and describe their concordance.  This problem is similar to the one in 6th week assignment, but this time it is *required* to: 1) use two dimensional contingency tables implemented by `table` to compare membership between two assignments of observations to clusters, and 2) programmatically re-order rows and columns in the `table` outcome in the increasing order of observations shared between two clusters (please see examples in lecture slides).
+
+Answer:
+FOR WHS DATA:
+Below is finding clusters by K-means:
+For 2 clusters:
+```{r}
+# 2 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(WHS2,K, nstart=100) $cluster, 
+    SCALED.SUBSET= kmeans(WHS2,K, nstart=100) $cluster))
+}
+cmp.shortcut(2, nstart=100)
+```
+For 3 clusters
+```{r}
+# 3 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(WHS2,K, nstart=100) $cluster, 
+    SCALED.SUBSET= kmeans(WHS2,K, nstart=100) $cluster))
+}
+cmp.shortcut(3, nstart=100)
+```
+For 4 clusters
+```{r}
+# 4 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(WHS2,K, nstart=100) $cluster, 
+    SCALED.SUBSET= kmeans(WHS2,K, nstart=100) $cluster))
+}
+cmp.shortcut(4, nstart=100)
+```
+Below is finding clusters by Ward method:
+```{r}
+data.1=WHS1[,apply(WHS1,2,sd)>1] 
+dd.1=dist(data.1) 
+hw.1=hclust(dd.1, method="ward.D2", members=NULL)
+w.tot=numeric(9)
+btw=numeric(9)
+for ( k in 2:4 ) {
+  clust = cutree(hw.1,k=k)
+  w = within(data.1,clust)
+  w.tot[k-1]=sum(w)
+  btw[k-1] = range(data.1,clust)
+} 
+plot(2:10,w.tot,pch=19,type="b") 
+plot(2:10,btw,pch=19,type="b") 
+plot(2:10,(btw/(2:4))/
+  (w.tot/(nrow(data.1)-2:10)),pch=19,type="b")
+```
+
+
+
+There are 4 clusters in the WHS data from this graph. While this is consistent with problem 1, it is not consistent from problem 2 when determining how many clusters in this dataset. Yet, because we are re-sampling everytime, it depends on the sample that was obtained as well.
+
+FOR QUAKES DATA:
+Below is finding clusters by K-means:
+For 2 clusters:
+```{r}
+# 2 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(scale(quakes),K, nstart=200) $cluster, 
+    SCALED.SUBSET= kmeans(scale(quakes),K, nstart=200) $cluster))
+}
+cmp.shortcut(2, nstart=200)
+```
+For 3 clusters
+```{r}
+# 3 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(scale(quakes),K, nstart=200) $cluster, 
+    SCALED.SUBSET= kmeans(scale(quakes),K, nstart=200) $cluster))
+}
+cmp.shortcut(3, nstart=200)
+```
+For 4 clusters
+```{r}
+# 4 clusters
+matrix.sort <- function(m) {
+  require(clue)
+  p=solve_LSAP(m, maximum=T)
+  m[,p]
+}
+cmp.shortcut=function(K, ...) {
+  matrix.sort(table(
+    FULL=kmeans(scale(quakes),K, nstart=200) $cluster, 
+    SCALED.SUBSET= kmeans(scale(quakes),K, nstart=200) $cluster))
+}
+cmp.shortcut(4, nstart=200)
+```
+Below is finding clusters by Ward method:
+```{r}
+data.2=quakes[,apply(quakes,2,sd)>1] 
+dd.2=dist(data.2) 
+hw.2=hclust(dd.2, method="ward.D2", members=NULL)
+w.tot=numeric(9)
+btw=numeric(9)
+for ( k in 2:4 ) {
+  clust = cutree(hw.2,k=k)
+  w = within(data.2,clust)
+  w.tot[k-1]=sum(w)
+  btw[k-1] = range(data.2,clust)
+} 
+plot(2:10,w.tot,pch=19,type="b") 
+plot(2:10,btw,pch=19,type="b") 
+plot(2:10,(btw/(2:4))/
+  (w.tot/(nrow(data.2)-2:10)),pch=19,type="b")
+```
+
+
+It is confirmed there are 4 clusters in the Quakes data.
+
+
+## For *extra* 5 points: between/within variance in hierarchical clusters
+
+Using functions `between` and `within` provided in the lecture slides calculate between and (total) within cluster variances for top 2 through 20 clusters defined by Ward's hierarchical clustering when applied to scaled WHS data.  Plot the results.  Compare their behavior to that of the same statistics when obtained for K-means clustering above.
+
+Answer:
+FOR WHS DATA:
+Between:
+```{r}
+between=function(WHS2,clust) {
+  b=0
+  total.mean = apply(WH2,2,mean)
+  for ( i in sort(unique(clust)) ) {
+    members = WHS2[clust==i,,drop=F]
+    centroid = apply(members,2,mean)
+    b = b + nrow(members)*
+       sum( (centroid-total.mean)^2 )
+  }
+return(b) }
+
+data.1=WHS1[,apply(WHS1,2,sd)>1] 
+dd.1=dist(data.1) 
+hw.1=hclust(dd.1, method="ward.D2", members=NULL)
+w.tot=numeric(9)
+btw=numeric(9)
+for ( k in 2:4 ) {
+  clust = cutree(hw.1,k=k)
+  w = within(data.1,clust)
+  w.tot[k-1]=sum(w)
+  btw[k-1] = range(data.1,clust)
+} 
+plot(2:10,w.tot,pch=19,type="b") 
+plot(2:10,btw,pch=19,type="b") 
+plot(2:10,(btw/(2:4))/
+  (w.tot/(nrow(data.1)-2:10)),pch=19,type="b")
+```
+
+Within:
+```{r}
+within=function(WHS2,clust) { 
+  w=numeric(length(unique(clust))) 
+  for ( i in sort(unique(clust)) ) {
+    members = WHS2[clust==i,,drop=F]
+    centroid = apply(members,2,mean) 
+    members.diff = sweep(members,2,centroid) 
+    w[i] = sum(members.diff^2)
+}
+return(w) }
+```
+
+FOR QUAKES DATA:
+Between:
+```{r}
+between3=function(quakes,clust) {
+  b=0
+  total.mean = apply(d,2,mean)
+  for ( i in sort(unique(clust)) ) {
+    members = quakes[clust==i,,drop=F]
+    centroid = apply(members,2,mean)
+    b3 = b3 + nrow(members)*
+       sum( (centroid-total.mean)^2 )
+  }
+return(b3) }
+```
+
+Within:
+```{r}
+within3=function(quakes,clust) { 
+  w3=numeric(length(unique(clust))) 
+  for ( i in sort(unique(clust)) ) {
+    members = quakes[clust==i,,drop=F]
+    centroid = apply(members,2,mean) 
+    members.diff = sweep(members,2,centroid) 
+    w3[i] = sum(members.diff^2)
+}
+return(w3) }
+```
+# Problem 4: Brute force randomization in hierarchical clustering (15 points)
+
+Compare distribution of the heights of the clusters defined by `hclust` with Ward's clustering of Euclidean distance between countries in scaled WHS dataset and those obtained by applying the same approach to the distances calculated on randomly permuted WHS dataset as illustrated in the lecture slides.  Discuss whether results of such brute force randomization are supportive of presence of unusually close or distant sets of observations within WHS data.
+
+Answer:
+FOR WHS DATA:
+```{r}
+ori.heights = hw.1$height 
+rnd.heights = numeric()
+for (i.sim in 1:100 ) {
+  data.rnd <-apply(data.1,2,sample) 
+  hw.rnd=hclust(dist(data.rnd),method="ward.D2") 
+  rnd.heights <- c(rnd.heights,hw.rnd$height)
+} 
+plot(ori.heights,rank(ori.heights)/length(ori.heights),
+     col="red",xlab="height", ylab="F(height)",pch=19, main='WHS data')
+points(rnd.heights, rank(rnd.heights)/length(rnd.heights), col="blue")
+```
+
+FOR QUAKES DATA:
+```{r}
+ori.heights = hw.2$height 
+rnd.heights = numeric()
+for (i.sim in 1:100 ) {
+  data.rnd <-apply(data.1,2,sample) 
+  hw.rnd=hclust(dist(data.rnd),method="ward.D2") 
+  rnd.heights <- c(rnd.heights,hw.rnd$height)
+} 
+plot(ori.heights,rank(ori.heights)/length(ori.heights),
+     col="red",xlab="height", ylab="F(height)",pch=19, main='Quakes data')
+points(rnd.heights, rank(rnd.heights)/length(rnd.heights), col="blue")
+```
+
+
+The results of such brute force randomization are not very supportive of presence of unusually close or distant sets of observations within WHS data and Quakes data.

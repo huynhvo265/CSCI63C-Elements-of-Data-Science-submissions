@@ -1,0 +1,264 @@
+---
+title: "CSCI E-63C Week 9 assignment"
+output:
+  html_document:
+    toc: true
+---
+
+# Preface
+
+For this assignment we will use banknote authentication data (the one we worked with in week 2 assignment) to fit logistics regression model and evaluate performance of LDA, QDA and KNN classifiers.  As we have seen earlier this dataset should allow to predict fairly well which banknotes are authentic and which ones are forged, so we should expect to see low error rates for our classifiers.  Let's see whether some of those tools perform better than others on this data.
+```{r}
+library(psych)
+library(ggplot2)
+library(MASS)
+library(class)
+library(ISLR)
+library(e1071)
+```
+I put the prediction function here because it can be used to answer multiple questions
+```{r}
+assess.prediction=function(truth,predicted) {
+# check for missing values (we are going to
+# compute metrics on non-missing values only) predicted = predicted[ ! is.na(truth) ] truth = truth[ ! is.na(truth) ]
+  truth = truth[ ! is.na(predicted) ]
+  predicted = predicted[ ! is.na(predicted) ] 
+  cat("Total cases that are not NA: ",
+         length(truth),"\n",sep="")
+   # overall accuracy of the test: how many cases
+   # (both positive and
+   # negative) we got right:
+   cat("Correct predictions (accuracy): ",
+     sum(truth==predicted),
+     "(",signif(sum(truth==predicted)*100/
+     length(truth),3),"%)\n",sep="")
+   # how predictions align against known
+   # training/testing outcomes:
+   # TP/FP= true/false positives,
+   # TN/FN=true/false negatives
+   TP = sum(truth==1 & predicted==1)
+   TN = sum(truth==0 & predicted==0)
+   FP = sum(truth==0 & predicted==1)
+   FN = sum(truth==1 & predicted==0)
+   P = TP+FN  # total number of
+         # positives in the truth data
+   N = FP+TN  # total number of
+# negatives
+   cat("TPR (sensitivity)=TP/P: ",
+       signif(100*TP/P,3),"%\n",sep="")
+   cat("TNR (specificity)=TN/N: ",
+       signif(100*TN/N,3),"%\n",sep="")
+   cat("PPV (precision)=TP/(TP+FP): ",
+       signif(100*TP/(TP+FP),3),"%\n",sep="")
+   cat("FDR (false discovery)=1-PPV: ",
+       signif(100*FP/(TP+FP),3),"%\n",sep="")
+   cat("FPR =FP/N=1-TNR: ",
+      signif(100*FP/N,3),"%\n",sep="")
+
+return.df <- data.frame(sensitivity=signif(100*TP/P,3), specificity=signif(100*TN/N,3))
+return(return.df)
+}
+```
+# Problem 1 (10 points): logistic regression
+
+Fit logistic regression model of the class attribute using remaining four attributes as predictors in the model.  Produce summary of the model, describe which attributes appear to be significantly associated with the categorical outcome in this model.  Use this model to make predictions on the entire dataset and compare these predictions and corresponding true values of the class attribute using confusion matrix (i.e. contingency table).  Calculate error rate (would this be training or test error in this case?), sensitivity and specificity (assuming that we are predicting class "1").  Describe the results.
+Answer:
+First, I would like to import the data to my computer and clean up the data by removing double rows, and any N.A data:
+```{r}
+banknote <- read.table("/Users/Huynhvalentine/Downloads/data_banknote_authentication.txt", sep=",")
+banknote <- data.frame(banknote)
+colnames(banknote) <- c("variance", "skewness", "curtosis", "entropy", "class")
+banknote <- unique(banknote)
+banknote <- na.omit(banknote)
+head(banknote)
+
+```
+I would like to see the datatype by using the mode() function, and we see that all of the variables have a numeric type:
+```{r}
+sapply(banknote, mode)
+```
+For a quick observation of the data frame, there are 1372 rows, 5 columns:
+
+```{r}
+dim(banknote)
+```
+I also would like to see the statistic behind the given data, by install.packages("psych") , then library('psych') in order to use describe()
+```{r}
+describe(banknote)
+```
+
+For observation, as summary(banknote$class) shows that there is not a wide range of variables, it is more likely to be some type of boolean data. In this case, 0 stands for legal tender, and 1 stands for counterfeit bill. After running below R code, we see that there are currently 762 values representing legal tender, and 610 values representing counterfeit bill:
+```{r}
+summary(banknote$class)
+banknote$class <- factor(banknote$class)
+summary(banknote$class)
+banknote$class <-c("yes","no")[banknote$class]
+banknote$class <- factor(banknote$class)
+summary(banknote$class)
+```
+Box plots:
+
+```{r}
+#The relation between Class and Variance.
+ggplot(banknote, aes(x=class, y=variance, fill = class))+geom_boxplot(outlier.color="red", outlier.shape=8) + ggtitle("Variance boxplot")
+#The relation between Class and Skewness.
+ggplot(banknote, aes(x=class, y=skewness, fill = class))+geom_boxplot(outlier.color="red", outlier.shape=8) + ggtitle("Skewness boxplot")
+#The relation between Class and Curtosis.
+ggplot(banknote, aes(x=class, y=curtosis, fill = class))+geom_boxplot(outlier.color="red", outlier.shape=8) + ggtitle("Curtosis boxplot")
+#The relation between Class and Entropy.
+ggplot(banknote, aes(x=class, y=entropy, fill = class))+geom_boxplot(outlier.color="red", outlier.shape=8) + ggtitle("Entropy boxplot")
+```
+
+With the above boxplots between Class and the 4 remaining attributes : Variance, Skewness, Curtosis, and Entropy; we see that Vairance and Skewness have higher median when the class is yes, meaning the dollar bill is counterfeit. The attributes Curtosis and Entropy give a 50% chance if the dollar bill is counterfeit or not. Using ggplot, I see that Variance and Skewness attributes appear to be significantly associated with the categorical outcome in this model. Yet, I aslo keep in mind that there is overlap of values in these attributes, but less overlap compared to box plots for Curtosis and Entropy when determining Class.
+There is no real trend in Entropy box plot. There is trend in Variance boxplot and Skewness boxplot.
+
+Logistic Regression:
+```{r}
+glm.fit=glm(class~variance+skewness+curtosis+entropy, 
+            data=banknote, family=binomial)
+summary(glm.fit)
+```
+Using fit logistic regression model of the class attribute using remaining four attributes as predictors in the model,  the Z-score from these attributes, looks like skewness has lowest score, then is curtosis, variance and then entropy has the highest score.
+
+
+
+```{r}
+glm.probs=predict(glm.fit, type="response")
+glm.pred=rep("0", dim(banknote)[1])
+glm.pred[glm.probs>0.5]="1"
+table(glm.pred, banknote$class)
+mean(glm.pred==banknote$class)
+mean(glm.pred!=banknote$class)
+
+assessment<- assess.prediction(banknote$class, ifelse(predict(glm.fit, type="response")>0.5,1,0))
+```
+The model predicts 608 is real money, and 4 of them is missed on. The model predicts 734 is counterfeit, and missed on 2 of them. However, there is about 0% the prediction is correct on average. I am not sure why. By manual calculation, the specificity for this dataset is 608/(608+2)*100% = 99.7%; the sensitivity is 734/(734+4)*100% = 99.45%.
+I still think that this is considered a good prediction using logistic regression model.
+
+Through assessment, it is convinced that logistic regression model provides zero accuracy for this dataset. But I think there is something wrong of this result.
+
+# Problem 2 (10 points): LDA and QDA
+
+Using LDA and QDA implementations available in the package `MASS`, fit LDA and QDA classifiers on the entire dataset and calculate confusion matrix, (training) error rate, sensitivity and specificity for each of them.
+
+Compare them to those of logistic regression.  Describe the results.
+```{r}
+lda.fit=lda(class~variance+skewness+curtosis+entropy, data=banknote)
+lda.fit
+```
+
+```{r}
+lda.pred <- predict(lda.fit)
+lda.class=lda.pred$class
+table(lda.class, banknote$class)
+
+mean(lda.class==banknote$class)
+mean(lda.class!=banknote$class)
+
+assessment <- assess.prediction(banknote$class, ifelse(predict(lda.fit)$posterior[,2] >0.5, 1,0))
+```
+
+The model predicts 610 is real money, and 17 of them is missed on. The model predicts 721 is counterfeit, and missed on zero of them. However, there is about 99% the prediction is correct on average. This is considered a very good prediction using LDA model.
+
+LDA looks very comparable to Logistic Regression method. Both have similar in the 600s values for real dollar bill, and about 700 values for counterfeit bills. 
+
+However, there is about 0% the prediction is correct on average. I am not sure why. By manual calculation, the specificity for this dataset is 610/(610+0)*100% = 100%; the sensitivity is 721/(721+17)*100% = 97.7%.
+Through mannual assessment, it is convinced that LDA model provides anough accuracy for this dataset. 
+# Problem 3 (10 points): KNN
+
+Using `knn` from library `class`, fit KNN classifiers for the entire dataset and calculate confusion matrix, (training) error rate, sensitivity/specificity for  $k=1$, $5$ and $25$ nearest neighbors models.  Compare them to the corresponding results from LDA, QDA and logistic regression. Describe results of this comparison and discuss whether it is surprising to see low *training* error for KNN classifier with $k=1$.
+```{r}
+train <- rep(c(T,F), dim(banknote) [1]/2)
+knn.pred.1 <- knn(banknote[train, c(1:4,4)], banknote[!train, c(1:4,4)], banknote[train, "class"], k=1)
+knn.pred.5 <- knn(banknote[train, c(1:4, 4)], banknote[!train, c(1:4,4)], banknote[train, "class"], k=5)
+knn.pred.25 <- knn(banknote[train, c(1:4, 4)], banknote[!train, c(1:4,4)], banknote[train, "class"], k=25)
+
+table(knn.pred.1, banknote[train,"class"])
+table(knn.pred.5, banknote[train,"class"])
+table(knn.pred.25, banknote[train,"class"])
+
+mean(knn.pred.1!= banknote[train, "class"])
+mean(knn.pred.5!= banknote[train, "class"])
+mean(knn.pred.25!= banknote[train, "class"])
+
+assesment <-assess.prediction(banknote[train, "class"], knn.pred.1)
+assesment <-assess.prediction(banknote[train, "class"], knn.pred.5)
+assesment <-assess.prediction(banknote[train, "class"], knn.pred.25)
+```
+
+
+All k=1, k=5 and k=10 have very good and consistent results. The correct predictions (accuracy) for these Knn clusters method are high (above 99%).
+I am not sure why the sensitivity and specificity are still N/A. Therefore, I will calculate them mannually for k=1, k=5 and k=25:
+k=1: Specificity: 305/(305+0)*100% = 100%
+     Sensitivity: 369/(369+0)*100% = 100%
+k=5: Specificity: 305/(305+0)*100% = 100%
+     Sensitivity: 368/(368+1)*100% = 99.7%
+k=25:Specificity: 305/(305+0)*100% = 100%
+     Sensitivity: 365/(365+4)*100% = 98.9%
+
+Through specificity, all k=1,5 and 25 provide consistent results. Yet, for sensitivity, the bigger the k, the less sensible it is to the data.
+I do keep in my that just because you have a good prediction date does not mean it is the best model. You don't want to miss something else that can be important and can be found from the other model.
+# Problem 4 (30 points): compare test errors of logistic regression, LDA, QDA and KNN
+
+Using resampling approach of your choice (e.g. cross-validation, bootstrap, etc.) obtain test error as well as sensitivity and specificity for each of these methods (logistic regression, LDA, QDA, KNN with $k=1,2,5,11,21,51,101$).  Present results in the form of boxplots, compare test error/sensitivity/specificity across these methods and discuss their relative performance.
+```{r}
+nObs <- 1000
+nVars <- 10 # we will have TEN variables
+sd2 <- 2
+# simulate data: class ‘a’ has all vars normally distributed # with sd=1, class ‘b’ has all vars normally distributed
+# with sd=2. Means for all vars and classes are 0:
+xTrain <- rbind(matrix(rnorm(nVars*nObs),ncol=nVars),
+                matrix(rnorm(nVars*nObs,sd=sd2),ncol=nVars)) 
+yTrain <- factor(sort(rep(letters[1:2],nObs)))
+pairs(xTrain[sample(nrow(xTrain)),1:3],
+      col=as.numeric(yTrain),pch=as.numeric(yTrain))
+old.par <-par(mfrow=c(1,3))
+invisible(lapply(1:3,function(x)boxplot(xTrain[,x]~yTrain,
+          col=c("lightblue","orange"))))
+par(old.par)
+```
+
+```{r}
+#Assessment
+assessment.train <- assess.prediction(banknote[train,]$class, ifelse(predict(glm.fit, type="response") >0.5, 1,0))
+assessment.test <- assess.prediction(banknote[!train,]$class, ifelse(predict(glm.fit, type="response") >0.5, 1,0))
+```
+#Add to data.frame for future plotting:
+#dfTmp <- rbind(banknote, data.frame(sim=nObs,methods="glm", 
+                                 error=c(glm.test.error, glm.train.error),
+                                 sensitivity=c(assessment.test$sensitivity,
+                                               assessment.train$sensitivity),
+                                 specificity=c(assessment.test$specificity,
+                                               assessment.train$specificity),
+                                 trainTest=c("test", "train")))
+
+#Test error rate
+ggplot(dfTmp, aes(x=0, y=error, colour=method)) + geom_boxplot() +facet_wrap(~trainTest)
+#Sensitivity
+ggplot(dfTmp, aes(x=0, y=sensitivity, colour=method))+geom_boxplot()+facet_wrap(~trainTest)
+#Specificity
+ggplot(dfTmp, aes(x=0, y=specificity, colour=method))+geom_boxplot()+facet_wrap(~trainTest)
+```
+I have no idea why my code does not provide the results I am looking for.
+
+# Extra 20 points problem: naive Bayes classifier
+
+Fit naive Bayes classifier (see lecture slides for examples of using `naiveBayes` function from package `e1071`) on banknote authentication dataset and assess its performance on test data by resampling along with logistic regression, LDA, QDA and KNN in Problem 4 above.  In other words, add naive Bayes to the rest of the methods evaluated above *and explain notable increase in the test error* for the naive Bayes classifier.  Please notice that the requirement for *explaining* the difference in performance of the naive Bayes classifier comparing to all others is essential for earning all the points available for this problem.  This is an extra point problem designed to be a level harder than the rest -- ideally, the explanation, aside from correctly pointing at the source of degraded performance, should also include numerical/graphical illustration of its effect using informative representation of banknote authentication data or relevant simulated data.  Best of luck!
+```{r}
+nObs <- 1000
+nVars <- 10 # we will have TEN variables
+sd2 <- 2
+# simulate data: class ‘a’ has all vars normally distributed # with sd=1, class ‘b’ has all vars normally distributed
+# with sd=2. Means for all vars and classes are 0:
+xTrain <- rbind(matrix(rnorm(nVars*nObs),ncol=nVars),
+                matrix(rnorm(nVars*nObs,sd=sd2),ncol=nVars)) 
+yTrain <- factor(sort(rep(letters[1:2],nObs)))
+pairs(xTrain[sample(nrow(xTrain)),1:3],
+      col=as.numeric(yTrain),pch=as.numeric(yTrain))
+old.par <-par(mfrow=c(1,3))
+invisible(lapply(1:3,function(x)boxplot(xTrain[,x]~yTrain,
+          col=c("lightblue","orange"))))
+par(old.par)
+```
+
+

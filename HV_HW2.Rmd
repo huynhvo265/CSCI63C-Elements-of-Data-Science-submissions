@@ -1,0 +1,240 @@
+---
+Title: "HW2 submission_ Huynh Vo"
+output: html_notebook
+
+---
+Piazza note: Good day to you, I have reached out to professors and TAs about my travelling to Vietnam. I have arrived at my destination safe and sound, and I would like to submit my HW2. Professor Alos Diallo has understood my travel situation and allowed me to submit my HW on Sunday. 
+Regards,
+Huynh
+
+# Banknote authentication (30 points)
+
+This dataset presents an example of classification problem (authentic vs. counterfeit bank notes) using continuous predictors derived from image processing. More details about underlying data can be found in corresponding [dataset description](http://archive.ics.uci.edu/ml/datasets/banknote+authentication) at UCI ML website. To load data into R please use data file `data_banknote_authentication.txt` available at the course website as well as in UCI ML dataset repository.
+
+Once the dataset in loaded into R, please name appropriately data set attributes, determine number of variables (explain which ones are predictors and which one is the outcome) and observations in the dataset (R functions such as `dim`, `nrow`, `ncol` could be useful for this), generate summary of the data using `summary` function in R and generate pairwise XY-scatterplots of each pair of continuous predictors indicating outcome using colour and/or shape of the symbols (you may find it convenient to use `pairs` plotting function). Describe your observations and discuss which of the variables are more likely to be informative with respect to discriminating forged bank notes from genuine.
+
+Please comment on whether given the data at hand such problem appears to be an easy or hard one to solve.  Try to guess using your best intuition, what could be an error in discriminating forged banknotes from genuine  in this dataset: 50%, 20%, 10%, 5%, 2%, less than that?  Later in the course we will work with this dataset again to actually develop such a classifier at which point you will get quantitative answer to this question, but for now, just from visual inspection of the scatterplots above, what do you think such an error could be?  There is no wrong answer at this point, just try your best and make a note of it, so you can go back to it several weeks later.  Also, please discuss some of the tradeoffs that might be associated with that. For instance, should one expect the cost of calling genuine note counterfeit to be the same as making the opposite call (allowing fake bills as authentic).  Consider also anticipated frequency of these cases in the practical settings and how it could potentially interact with these costs.
+
+Answer:
+First, I would like to import the data to my computer and clean up the data by removing double rows, and any N.A data:
+```{r}
+banknote <- read.table("/Users/Huynhvalentine/Downloads/banknote.txt", sep=",")
+banknote <- data.frame(banknote)
+colnames(banknote) <- c("variance", "skewness", "curtosis", "entropy", "class")
+unique(banknote)
+na.omit(banknote)
+```
+
+I would like to see the datatype by using the mode() function, and we see that all of the variables have a numeric type:
+```{r}
+sapply(banknote, mode)
+```
+For a quick observation of the data frame, there are 1372 rows, 5 columns:
+
+```{r}
+nrow(banknote)
+ncol(banknote)
+dim(banknote)
+```
+I also would like to see the statistic behind the given data, by install.packages("psych") , then library('psych') in order to use describe()
+```{r}
+library('psych')
+describe(banknote)
+```
+
+For observation, as summary(banknote$class) shows that there is not a wide range of variables, it is more likely to be some type of boolean data. In this case, 0 stands for legal tender, and 1 stands for counterfeit bill. After running below R code, we see that there are currently 762 values representing legal tender, and 610 values representing counterfeit bill:
+```{r}
+summary(banknote$class)
+banknote$class <- factor(banknote$class)
+summary(banknote$class)
+banknote$class <-c("yes","no")[banknote$class]
+banknote$class <- factor(banknote$class)
+summary(banknote$class)
+```
+The following code shows generation of xy-scatterplots of variance and skewness count for banknote in this dataset with color indicating their classification using basic plotting capabilities in R as well as those provided by the package `ggplot2`.
+
+
+```{r}
+oldPar <- par(mfrow=c(1:2),ps=16)
+for ( iclass in sort(unique(banknote$class)) ) {
+    plot(banknote[,c("variance","skewness")],type="n",
+        main=paste("class:",iclass))
+    iTmp <- (1:length(levels(banknote$class)))[levels(banknote$class)==iclass]
+    points(banknote[banknote$class==iclass,c("variance","skewness")],col=iTmp,pch=iTmp)
+}
+```
+
+We can also plot them using ggplot:
+```{r habPlotGG,fig.height=3,fig.width=6}
+library(ggplot2)
+ggplot(banknote,aes(x=variance,y=skewness,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+I also would like to visualize the variance vs. curtosis and entropy: 
+```{r}
+ggplot(banknote,aes(x=variance,y=curtosis,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+```{r}
+ggplot(banknote,aes(x=variance,y=entropy,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+
+I also would like to visualize the entropy and curtosis: 
+```{r}
+ggplot(banknote,aes(x=entropy,y=curtosis,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+
+
+```{r}
+ggplot(banknote,aes(x=entropy,y=skewness,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+I also would like to visualize the skewness vs. curtosis: 
+```{r}
+ggplot(banknote,aes(x=skewness,y=curtosis,colour=class,shape=class)) + 
+geom_point() + facet_wrap(~class)
+```
+
+Base on the pair plotting function between of each pair of continuous predictors, I see variance is very likely to be informative with respect to discriminating forged bank notes from genuine. Counterfeit bill has variance less than 0, and legal tender has variance more than 0. Curtosis and skewness are next in line to be likely to be informative with respect to discriminating forged bank notes from genuine.
+Entropy is not likely to be informative with respect to discriminating forged bank notes from genuine because both counterfeit and legal tender have similar data for entropy.
+The given data is still hard to identify whether the bill is authentic or not because there are a lot of overlap information between "yes, legal tender" or "no, conterfite bill". I believe there is 50% chance that could be an error in discriminating forged banknotes from genuine in this dataset.
+
+
+# Abalone age (30 points)
+
+This dataset presents an example of a regression problem -- predicting mollusc age from measurements that are easier to obtain. More details about underlying data can be found in corresponding [dataset description](http://archive.ics.uci.edu/ml/datasets/Abalone). To load data into R please use file `abalone.data` available at the course website as well as at the UCI ML data repository.
+
+Once the dataset in loaded into R, please name appropriately data set attributes, determine number of variables (explain which ones are predictors -- categorical vs. continuous -- and which one is the outcome) and observations in the dataset (R functions such as `dim`, `nrow`, `ncol` could be useful for this), generate summary of the data using `summary` function in R and generate pairwise XY-scatterplots of each pair of *continuous* attributes.
+
+Describe your observations and discuss which attributes might be more useful for predicting snail age.
+
+For **extra 5 points** for some of the continuous and
+categorical predictors generate boxplots rendering relationship between them.
+
+Answer:
+
+First, I would like to import the data to my computer and clean up the data by removing double rows, and N.A data:
+```{r}
+abalone <- read.table("/Users/Huynhvalentine/Downloads/abalone.txt", sep=",")
+abalone <- data.frame(abalone)
+colnames(abalone) <- c("sex", "length", "diameter", "height", "wholeweight", "shuckedweight", "visceraweight", "shellweight", "rings")
+unique(abalone)
+na.omit(abalone)
+```
+
+We see that this data has 9 variables. For a quick observation of data frame, there are 4177 rows, and 9 columns:
+
+```{r}
+nrow(abalone)
+ncol(abalone)
+dim(abalone)
+```
+I would like to see datatype by using the mode() function, and we see that all of the variables have numeric type:
+```{r}
+sapply(abalone, mode)
+```
+I also would like to see the statistic behind the given data, by install.packages("psych") , then library('psych') in order to use describe()
+```{r}
+library('psych')
+describe(abalone)
+```
+
+For observation, as summary(abalone$sex) shows that there male, female and infant that the data was obtained from. Using summary(), we see that there are 1307 females, 1528 males and 1342 infants.
+```{r}
+summary(abalone$sex)
+```
+
+We also see that there are 29 different rings representing 29 ages for abalones:
+```{r}
+summary(abalone$rings)
+abalone$rings <- factor(abalone$rings)
+summary(abalone$rings)
+```
+
+From data observation so far, sex and rings are categorical data; length, diameter, height, wholeweight, shuckedweight, visceraweight and shellweight are continuous data. Rings are also the outcome.
+
+The following code shows generation of xy-box plots of sex vs. rings and remaining continuous predictors of abalone age using basic plotting capabilities in R as well as those provided by the package `ggplot2`.
+```{r}
+library(ggplot2)
+ggplot(abalone, aes(x=sex, y=rings))+
+geom_boxplot()
+```
+
+```{r}
+ggplot(abalone, aes(x=sex, y=length))+
+geom_boxplot()
+```
+
+```{r}
+ggplot(abalone, aes(x=sex, y=diameter))+
+geom_boxplot()
+```
+```{r}
+ggplot(abalone, aes(x=sex, y=height))+
+geom_boxplot()
+```
+```{r}
+ggplot(abalone, aes(x=sex, y=wholeweight))+
+geom_boxplot()
+```
+
+```{r}
+ggplot(abalone, aes(x=sex, y=shuckedweight))+
+geom_boxplot()
+```
+```{r}
+ggplot(abalone, aes(x=sex, y=visceraweight))+
+geom_boxplot()
+```
+```{r}
+ggplot(abalone, aes(x=sex, y=shellweight))+
+geom_boxplot()
+```
+From the above graphs, I see that shucked weight, viscera weight, and shell weight help to identify abalone sex. Infants have the lowest values comparing to the female and male data; and males have a wider range of variables when comparing to female data.
+Above, we had data visulized based on sex. Now, we visualize data based on rings (abalone age) and sex against other variables:
+```{r}
+ggplot(abalone,aes(x=rings,y=length,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+
+```{r}
+ggplot(abalone,aes(x=rings,y=diameter,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+```{r}
+ggplot(abalone,aes(x=rings,y=height,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+
+```{r}
+ggplot(abalone,aes(x=rings,y=wholeweight,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+
+```{r}
+ggplot(abalone,aes(x=rings,y=shuckedweight,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+
+```{r}
+ggplot(abalone,aes(x=rings, y=visceraweight,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+
+```{r}
+ggplot(abalone,aes(x=rings,y=shellweight,colour=sex,shape=sex)) + 
+geom_point() + facet_wrap(~sex)
+```
+After graphing, I have observed that males have a wider range of attributes compared to females, and infants have lower values compared to males and females. 
+
+For **extra 5 points** for some of the continuous and
+categorical predictors generate boxplots rendering relationship between them --> I have completed this question above. 
+Regards,
+Huynh
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
