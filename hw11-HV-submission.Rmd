@@ -1,0 +1,231 @@
+---
+title: "CSCI E-63C Week 11 assignment"
+output:
+  html_document:
+    toc: true
+---
+Student: Huynh Vo
+```{r setup, include=FALSE}
+library(ISLR)
+library(e1071)
+library(randomForest)
+library(class)
+library(ggplot2)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Preface
+
+This week assignment will explore behavior of support vector classifiers and SVMs (following the distinction made in ISLR) on banknote authentication dataset from UCI ML archive.  We worked with it on multiple occasions before (most recently two weeks ago evaluating performance of logistic regression, discriminant analysis and KNN on it):
+
+```{r dbaExample}
+dbaDat <- read.table("/Users/Huynhvalentine/Downloads/banknote.txt", sep=",")
+colnames(dbaDat) <- c("var","skew","curt","entr","auth")
+dbaDat$auth <- factor(dbaDat$auth)
+dim(dbaDat)
+summary(dbaDat)
+head(dbaDat)
+pairs(dbaDat[,1:4],col=as.numeric(dbaDat$auth))
+```
+
+Here we will use SVM implementation available in library `e1071` to fit classifiers with linear and radial (polynomial for extra points) kernels and compare their relative performance as well as to that of random forest and KNN.
+
+# Problem 1 (20 points): support vector classifier (i.e. using linear kernel) 
+
+Use `svm` from library `e1071` with `kernel="linear"` to fit classifier (e.g. ISLR Ch.9.6.1) to the entire banknote authentication dataset setting parameter `cost` to 0.001, 1, 1000 and 1 mln.  Describe how this change in parameter `cost` affects model fitting process (hint: the difficulty of the underlying optimization problem increases with cost -- can you explain what drives it?) and its outcome (how does the number of support vectors change with `cost`?) and what are the implications of that.  Explain why change in `cost` value impacts number of support vectors found. (Hint: there is an answer in ISLR.)  
+
+
+Use `tune` function from library `e1071` (see ISLR Ch.9.6.1 for details and examples of usage) to determine approximate value of cost (in the range between 0.1 and 100 -- the suggested range spanning ordes of magnitude should hint that the density of the grid should be approximately logarithmic -- e.g. 1, 3, 10, ... or 1, 2, 5, 10, ... etc.) that yields the lowest error in cross-validation employed by `tune`.  Setup a resampling procedure repeatedly splitting entire dataset into training and test, using training data to `tune` cost value and test dataset to estimate classification error. Report and discuss distributions of test errors from this procedure and selected values of `cost`.
+
+Answer: se `svm` from library `e1071` with `kernel="linear"` to fit classifier (e.g. ISLR Ch.9.6.1) to the entire banknote authentication dataset setting parameter `cost` to 0.001, 1, 1000 and 1 mln. A very small value of cost will cause the optimizer to look for a larger-margin separating hyperplane. 
+```{r}
+# tune cost by cross-validation:
+tune.out <- tune(svm, auth~., data=dbaDat[,c("var","skew","curt","entr","auth")], kernel="linear", ranges=list(cost=c(0.001,1,1000,1e6)))
+# cost=1000 is the best:
+summary(tune.out)
+```
+
+```{r}
+# best model:
+bestmod <- tune.out$best.model
+summary(bestmod)
+```
+
+
+
+Base on the result, cost = 1000 yields the lowest error in cross-validation employed by `tune`. The best cost=1000 is verified using 'tune.out$best.model'. The function also shows gamma=0.25 is when the classifier best fitted. Below is the linear fit plots of attributes variance, skewness, curtosis, and entropy. 
+
+
+```{r}
+svmfit <- svm(auth~., data=dbaDat[,c("var","skew","curt","entr","auth")], kernel="linear", ranges=list(cost=1000))
+plot(svmfit, dbaDat, var~skew)
+plot(svmfit, dbaDat, var~curt)
+plot(svmfit, dbaDat, var~entr)
+plot(svmfit, dbaDat, skew~curt)
+plot(svmfit, dbaDat, skew~entr)
+plot(svmfit, dbaDat, curt~entr)
+```
+
+
+Cost represents misclassification or margin violation. The cost is related to the specific parameter, the allowance for points to be on the wrong side of the margin, it also reflects penalty. Large cost means that we allow many points on the wrong side.In this dataset, as we incease the cost, the error result is decreased because we allow the bigger margin to have more misclassified points, ideally the cost is 1000 in this case. There is a minimal point to increase the cost, for example in this case when we increase the cost up to 1000000, the error rate (misclassification) is higher than the results at cost = 1000; because too many points are located in the maximal margin classifier. 
+Changing in `cost` value impacts number of support vectors found because the error rate will change.
+
+Below, `tune` function from library `e1071` (see ISLR Ch.9.6.1 for details and examples of usage) is used to determine approximate value of cost (in the range between 0.1 and 100 -- the suggested range spanning ordes of magnitude should hint that the density of the grid should be approximately logarithmic -- e.g. 1, 3, 10, ... or 1, 2, 5, 10, ... etc.) that yields the lowest error in cross-validation employed by `tune`.  Setup a resampling procedure repeatedly splitting entire dataset into training and test, using training data to `tune` cost value and test dataset to estimate classification error. Report and discuss distributions of test errors from this procedure and selected values of `cost`:
+```{r}
+# tune cost by cross-validation:
+tune.out2 <- tune(svm, auth~., data=dbaDat[,c("var","skew","curt","entr","auth")], kernel="linear", ranges=list(cost=c(0.1,1,10,20,50,70,85,100)))
+#cost=10 or 20 have least error
+summary(tune.out2)
+```
+```{r}
+# denser grid around minimum:
+tune.out.3 <- tune(svm, auth~., data=dbaDat[,c("var","skew","curt","entr","auth")], kernel="linear", ranges=list(cost=c(5,7,10,12,15)))
+#I choose cost= 5 works best
+summary(tune.out.3)
+```
+
+At cost = 5, the method yields the lowest error in cross-validation employed by `tune`.
+
+Below, I split dataset 75% of dbaDat dataset to be training dataset:
+```{r}
+# split dataset 75% of dbaDat dataset to be training dataset:
+smp_size <- floor(0.75*nrow(dbaDat))
+set.seed(123)
+train_ind <- sample(seq_len(nrow(dbaDat)), size= smp_size, rep=TRUE)
+train <-dbaDat[train_ind, ]
+test <-dbaDat[-train_ind, ]
+```
+
+
+```{r}
+svmfit4 <- svm(auth~., data=train, kernel="linear", cost=5, scale=FALSE)
+plot(svmfit4, dbaDat, var~skew)
+ytrain <-  predict(svmfit4,train)
+#about 1% error in train data:
+table(predict=ytrain, truth=train$auth)
+#better performance on train data, about 1.5% error in test data:
+ypred <-  predict(svmfit4,test)
+table(predict=ypred, truth=test$auth)
+```
+
+At cost = 5, the dataset is splitted on trained based on 75% content of the dataset. As we test, the result is very optimal for this linear fit classification.
+
+# Problem 2 (10 points): comparison to random forest
+
+Fit random forest classifier on the entire banknote authentication dataset with default parameters.  Calculate resulting misclassification error as reported by the confusion matrix in random forest output.  Explain why error reported in random forest confusion matrix represents estimated test (as opposed to train) error of the procedure.  Compare resulting test error to that for support vector classifier obtained above and discuss results of such comparison.
+Answer: Fit random forest classifier on the entire banknote authentication dataset with default parameters:
+```{r}
+# Fit random forest to banknote authentication dataset and obtain test error:
+rfRes <- randomForest(auth~var+skew+curt+entr, data=dbaDat)
+print(rfRes)
+```
+The resulting misclassification error is calculated to be 0.66%  as reported by the confusion matrix in random forest output.
+The error reported in random forest confusion matrix represents estimated test (as opposed to train) error of the procedure because it both try to estimate the error rate to fit the dataset; although they both are different modelling, but they have the same purpose is to fit the dataset into the model.
+Compare resulting test error(0.66%) to that for support vector classifier obtained above (0.01*100 = 10%), they are different, but then again these are 2 different methods to fit the dataset, we can always choose whichever method works best for specific dataset.
+# Problem 3 (10 points): Comparison to cross-validation tuned KNN predictor
+
+Use convenience wrapper `tune.knn` provided by the library `e1071` on the entire dataset to determine optimal value for the number of the nearest neighbors 'k' to be used in KNN classifier.  Consider our observations in week 9 assignment when choosing range of values of `k` to be evaluated by `tune.knn`. Setup resampling procedure similar to that used above for support vector classifier that will repeatedly: a) split banknote authentication dataset into training and test, b) use `tune.knn` on training data to determine optimal `k`, and c) use `k` estimated by `tune.knn` to make KNN classifications on test data.  Report and discuss distributions of test errors from this procedure and selected values of `k`, compare them to those obtained for random forest and support vector classifier above.
+
+Answer:
+Use convenience wrapper `tune.knn` provided by the library `e1071` on the entire dataset to determine optimal value for the number of the nearest neighbors 'k' to be used in KNN classifier. At k = 5 to 11, there is no error rate.
+```{r}
+tuneknn= tune.knn("knn.wrapper", x= dbaDat, y=dbaDat$auth, k=1:20 , tunecontrol=tune.control(sampling="cross"))
+summary(tuneknn)
+```
+
+```{r}
+# a) banknote dataset is splitted in answer problem 1.
+# b) use `tune.knn` on training data to determine optimal `k`:
+tuneknntrain= tune.knn("knn.wrapper", x= train[,c("var","skew","curt","entr","auth")], y=train$auth, k=1:20 , tunecontrol=tune.control(sampling="cross"))
+summary(tuneknntrain)
+# c) use `k` estimated by `tune.knn` (k= 16) to make KNN classifications on test data.
+tuneknntest <- tune.knn("knn.wrapper", x= train[,c("var","skew","curt","entr","auth")], y=train$auth, k=16 , tunecontrol=tune.control(sampling="cross"))
+summary(tuneknntest)
+```
+
+
+Error estimation of ‘knn.wrapper’ using 10-fold cross validation: 0.0009708738.Compare this k=16 with error rate 0.00097(or 0.097%) to those obtained for random forest and support vector classifier above(test error rate for randomForest is 0.6%); and support vector (test error rate for support vector is 10%), using knn.wrapper with optimal k value provides the best error rate.
+
+
+# Problem 4 (20 points): SVM with radial kernel
+
+## Sub-problem 4a (10 points): impact of $gamma$ on classification surface
+
+*Plot* SVM model fit to the banknote authentication dataset using (for the ease of plotting) *only variance and skewness* as predictors variables, `kernel="radial"`, `cost=1` and `gamma=1` (see ISLR Ch.9.6.2 for an example of that done with a simulated dataset).  You should be able to see in the resulting plot the magenta-cyan classification boundary as computed by this model.  Produce the same kinds of plots using 0.01 and 100 as values of `gamma` also.  Compare classification boundaries between these three plots and describe how they are impacted by the change in the value of `gamma`.  Can you trace it back to the role of `gamma` in the equation introducing it with the radial kernel in ISLR?
+Answer: 
+Below is the plot of SVM model fit to the banknote authentication dataset using (for the ease of plotting) *only variance and skewness* as predictors variables, `kernel="radial"`, `cost=1` and `gamma=1`
+```{r}
+tsvmfit <- svm(auth~., data=dbaDat[,c("var","skew", "auth")], kernel="radial", gamma=1, cost=1)
+plot(tsvmfit, dbaDat, var~skew)
+```
+Produce the same kinds of plots using 0.01 and 100 as values of `gamma` also:
+```{r}
+tsvmfit1 <- svm(auth~., data=dbaDat[,c("var","skew", "auth")], kernel="radial", gamma=0.01, cost=1)
+plot(tsvmfit1, dbaDat, var~skew)
+tsvmfit2 <- svm(auth~., data=dbaDat[,c("var","skew", "auth")], kernel="radial", gamma=100, cost=1)
+plot(tsvmfit2, dbaDat, var~skew)
+```
+
+
+
+Comparing classification boundaries between these three plots,they are impacted greatly by the change in the value of `gamma`, with gramma=100, the boudary is very small; with gamma=1, the boundary is broad but still able to group the values in separate groups; with gamma=0.1 there seems to be higher error rate. The gamma role is to define how far the influence of a single dataset example reaches, with low values meaning 'far' and high values meaning 'close'. 
+
+## Sub-problem 4b (10 points): test error for SVM with radial kernel
+
+Similar to how it was done above for support vector classifier (and KNN), set up a resampling process that will repeatedly: a) split the entire dataset (using all attributes as predictors) into training and test datasets, b) use `tune` function to determine optimal values of `cost` and `gamma` and c) calculate test error using these values of `cost` and `gamma`.  You can start with `cost=c(1,2,5,10,20)` and `gamma=c(0.01,0.02,0.05,0.1,0.2)` as starting ranges to evaluate by `tune`, but please feel free to experiment with different sets of values and discuss the results of it and how you would go about selecting those ranges starting from scratch.  Present resulting test error graphically, compare it to that of support vector classifier (with linear kernel), random forest and KNN classifiers obtained above and discuss results of these comparisons. 
+Answer:
+a) split the entire dataset (using all attributes as predictors) into training and test datasets: this step is done from problem 2.
+b) use `tune` function to determine optimal values of `cost` and `gamma`
+```{r}
+tune.out4 <- tune(svm, auth~., data=train, kernel="radial", ranges=list(cost=c(1, 2, 5, 10, 20), gamma=c(0.01,0.02,0.05,0.1,0.2)))
+summary(tune.out4)
+```
+
+The optimal values of `cost` is 1 and `gamma` is 0.1.
+
+
+
+```{r}
+svmfit4 <- svm(auth~., data=train, kernel="radial", cost=1, gamma=0.1, scale=FALSE)
+plot(svmfit4, dbaDat, var~skew)
+ytrain4 <-  predict(svmfit4,train)
+#0% error in train data:
+table(predict=ytrain4, truth=train$auth)
+#also 0% error in test data:
+ypred4 <-  predict(svmfit4,test)
+table(predict=ypred4, truth=test$auth)
+```
+
+
+Present resulting test error graphically for test data, the test error rate is 0% with gamma=0.1 and cost = 1. Compare this result to that of support vector classifier (with linear kernel), random forest and KNN classifiers obtained above, radial kernel with gamma0.1 and cost =1 seem providing the best result in my opinion. 
+
+# Extra 10 points problem: SVM with polynomial kernel
+
+Repeat what was done above (plots of decision boundaries for various interesting values of tuning parameters and test error for their best values estimated from training data) using `kernel="polynomial"`.   Determine ranges of `coef0`, `degree`, `cost` and `gamma` to be evaluated by `tune`.  Present and discuss resulting test error and how it compares to linear and radial kernels and those of random forest and KNN.
+```{r}
+tune.out5 <- tune(svm, auth~., data=train, kernel="polynomial", ranges=list(cost=c(1, 2, 5, 10, 20), gamma=c(0.01,0.02,0.05,0.1,0.2)))
+summary(tune.out5)
+
+# best model:
+bestmod1 <- tune.out5$best.model
+summary(bestmod1)
+```
+
+After being evaluated by `tune`, best values estimated from training data, ranges of `coef0`= 0, `degree` = 3, `cost` = 10 and `gamma` 0.2. 
+
+
+```{r}
+svmfit5 <- svm(auth~., data=train, kernel="polynomial", cost=10, gamma=0.2, coef0=0, degree=3, scale=FALSE)
+plot(svmfit5, dbaDat, var~skew)
+ytrain5 <-  predict(svmfit5,train)
+#0% error in train data:
+table(predict=ytrain5, truth=train$auth)
+#also 0% error in test data:
+ypred5 <-  predict(svmfit5,test)
+table(predict=ypred5, truth=test$auth)
+```
+
+
+The resulting test error is 0% which is very good. Comparing to linear, polynomial kernel is better; comparing to radial kernels, the polynomial kernel provide the same result;  and those of random forest and KNN, the polynomial absolutely is more accurate.
+Good luck to me!
